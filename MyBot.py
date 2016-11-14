@@ -22,3 +22,7 @@ while True:
 class HaliteBotCode:
     def __init__(self, map: GameMap):
         self.map = map
+    def update(self, map:GameMap):
+        self.map = map
+        #add some other code here as well to update the model
+        #TODO check if the map is updated automatically by ref
