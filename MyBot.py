@@ -1,12 +1,23 @@
 from hlt import *
 from networking import *
+import logging
+import time
+from HaliteBotCode import *
 
 myID, gameMap = getInit()
+gameMap.setPlayerId(myID)
+haliteBot = HaliteBotCode(gameMap)
 sendInit("byronwall-halite-1")
+
+LOG_FILENAME = str(int(time.time())) + "-" + str(myID) + '.log'
+logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG)
+logging.debug('This message should go to the log file')
 
 while True:
     moves = []
     gameMap = getFrame()
+    haliteBot.update(gameMap)
+
     for y in range(gameMap.height):
         for x in range(gameMap.width):
             location = Location(x, y)
@@ -19,10 +30,4 @@ while True:
     sendFrame(moves)
 
 
-class HaliteBotCode:
-    def __init__(self, map: GameMap):
-        self.map = map
-    def update(self, map:GameMap):
-        self.map = map
-        #add some other code here as well to update the model
-        #TODO check if the map is updated automatically by ref
+

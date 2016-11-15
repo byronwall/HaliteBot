@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./halite -d "30 30" "python3 MyBot.py" "python3 MyBot.py" "python3 MyBot.py"
+./halite -d "10 10" "python3 MyBot.py" "python3 MyBot.py"
