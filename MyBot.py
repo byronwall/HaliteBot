@@ -5,8 +5,8 @@ import time
 from HaliteBotCode import *
 
 myID, gameMap = getInit()
-gameMap.setPlayerId(myID)
 haliteBot = HaliteBotCode(gameMap)
+haliteBot.setMyId(myID)
 sendInit("byronwall-halite-1")
 
 LOG_FILENAME = str(int(time.time())) + "-" + str(myID) + '.log'

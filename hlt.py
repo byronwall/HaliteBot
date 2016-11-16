@@ -33,7 +33,6 @@ class GameMap:
         self.width = width
         self.height = height
         self.contents = []
-        self.myID = 0
 
         for y in range(0, self.height):
             row = []
@@ -95,5 +94,3 @@ class GameMap:
     def getSite(self, l, direction = STILL)->Site:
         l = self.getLocation(l, direction)
         return self.contents[l.y][l.x]
-    def setPlayerId(self, id: int):
-        self.myID = id

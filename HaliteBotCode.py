@@ -12,6 +12,9 @@ class HaliteBotCode:
         self.updateSiteTarget()
 
         return
+    def setMyId(self, id:int):
+        self.id = id
+        return
     def updateSiteTarget(self):
         #this will go through spaces and find those that are accessible and then ranked by strength
         self.getBorderOfCurrentSpaces()
@@ -22,33 +25,34 @@ class HaliteBotCode:
 
         borderSites = set()
 
-        logging.debug("inside the getBorderCall")
+        logging.debug("inside the getBorderCall, myID = %d" % self.id)
 
-        for y in range(self.map.height):
-            for x in range(self.map.width):
-                logging.debug("testing border status of %d %d" % (x,y))
+        mapStr = "\n"
+
+        for x in range(self.map.width):
+            for y in range(self.map.height):
+                mapChar = "O"
                 location = Location(x, y)
                 site = self.map.getSite(location)
                 doneWithSite = False
 
                 #skip if already found or if owned by self
-                if (x,y) in borderSites or site.owner == self.map.myID:
-                    logging.debug("skipping site")
+                if (x,y) in borderSites or site.owner == self.id:
+                    if site.owner == self.id:
+                        mapStr += "#"
                     continue
-
-                logging.debug("tested the site, continuing checks")
 
                 for direction in DIRECTIONS:
                     #if a neighbor is owned by self, this is a neighbor, add to set
-                    if self.map.getSite(location, direction).owner == self.map.myID:
+                    if self.map.getSite(location, direction).owner == self.id:
                         borderSites.add((x,y))
-                        logging.debug(str(x) + "," + str(y) + " was added to set")
+                        mapChar = "*"
                         doneWithSite = True
                         break
 
-                #stop checking if a spot was found
-                if doneWithSite:
-                    break
+                mapStr += mapChar
+            mapStr += "\n"
+        logging.debug(mapStr)
 
         #do something with the border sites
         return borderSites
