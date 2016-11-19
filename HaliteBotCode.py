@@ -3,13 +3,13 @@ import logging
 
 
 class HaliteBotCode:
-    def __init__(self, map: GameMap):
-        self.map = map
+    def __init__(self, game_map: GameMap):
+        self.gameMap = game_map
         self.ownedSites = set()
         self.movesThisFrame = []
 
-    def update(self, map: GameMap):
-        self.map = map
+    def update(self, game_map: GameMap):
+        self.gameMap = game_map
         # add some other code here as well to update the model
         # TODO check if the map is updated automatically by ref
         # this will called each frame
@@ -39,7 +39,7 @@ class HaliteBotCode:
 
         for (x, y) in borderSites:
             location = Location(x, y)
-            site = self.map.getSite(location)
+            site = self.gameMap.getSite(location)
 
             if site.strength < minStrength:
                 minLocation = location
@@ -58,6 +58,10 @@ class HaliteBotCode:
             for location in self.ownedSites:
                 move = self.getNextMove(location, minLocation)
 
+                if self.gameMap.getSite(location).strength == 0:
+                    # skip a move if no strength
+                    continue
+
                 logging.debug("move to make %s", move)
 
                 if move != None:
@@ -70,26 +74,26 @@ class HaliteBotCode:
         # this will figure out how to get to the desired location, moving only through owned territory
 
         # get the desired direction(s)
-        northSouth = STILL
-        eastWest = STILL
+        north_south = STILL
+        east_west = STILL
 
         if start.x < target.x:
-            eastWest = EAST
+            east_west = EAST
         elif start.x > target.x:
-            eastWest = WEST
+            east_west = WEST
 
         if start.y < target.y:
-            northSouth = SOUTH
+            north_south = SOUTH
         elif start.y > target.y:
-            northSouth = NORTH
+            north_south = NORTH
 
         # know the deisred direction, check if either is owned by self
-        logging.debug("directions available from %s move %d %d", start, northSouth , eastWest)
+        logging.debug("directions available from %s move %d %d", start, north_south , east_west)
 
-        for direction in (northSouth, eastWest):
+        for direction in (north_south, east_west):
             if direction != STILL:
                 logging.debug("possible direction was not STILL %d", direction)
-                site = self.map.getSite(start, direction)
+                site = self.gameMap.getSite(start, direction)
 
                 logging.debug("possible site is owned by us or is the target, move to there")
                 # return this move
@@ -102,15 +106,15 @@ class HaliteBotCode:
         self.ownedSites = list()
 
         # this will update the list of sites that are owned by self (will contain locations)
-        for x in range(self.map.width):
-            for y in range(self.map.height):
+        for x in range(self.gameMap.width):
+            for y in range(self.gameMap.height):
 
                 location = Location(x, y)
-                site = self.map.getSite(location)
+                site = self.gameMap.getSite(location)
 
                 if site.owner == self.id:
                     self.ownedSites.append(location)
-                    logging.debug("added owned site %s with strength %d ", location, self.map.getSite(location).strength)
+                    logging.debug("added owned site %s with strength %d ", location, self.gameMap.getSite(location).strength)
 
         return
 
@@ -123,7 +127,7 @@ class HaliteBotCode:
         # get a sum of all the production
         for location in self.ownedSites:
             logging.debug("own that site")
-            site = self.map.getSite(location)
+            site = self.gameMap.getSite(location)
             prodTotal += site.production
 
             logging.debug("owned site at %s", location)
@@ -149,12 +153,12 @@ class HaliteBotCode:
 
         mapStr = "\n"
 
-        for y in range(self.map.height):
-            for x in range(self.map.width):
+        for y in range(self.gameMap.height):
+            for x in range(self.gameMap.width):
 
                 mapChar = "O"
                 location = Location(x, y)
-                site = self.map.getSite(location)
+                site = self.gameMap.getSite(location)
 
                 # skip if already found or if owned by self
                 if (x, y) in borderSites or site.owner == self.id:
@@ -165,7 +169,7 @@ class HaliteBotCode:
 
                 for direction in DIRECTIONS:
                     # if a neighbor is owned by self, this is a neighbor, add to set
-                    if self.map.getSite(location, direction).owner == self.id:
+                    if self.gameMap.getSite(location, direction).owner == self.id:
                         borderSites.add((x, y))
                         mapChar = "*"
                         break
