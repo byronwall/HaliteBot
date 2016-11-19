@@ -77,26 +77,44 @@ class HaliteBotCode:
         north_south = STILL
         east_west = STILL
 
-        if start.x < target.x:
-            east_west = EAST
-        elif start.x > target.x:
-            east_west = WEST
+        #these need to handle going around the edge
+        if start.x == target.x:
+            east_west = STILL
+        elif start.x < target.x:
+            if abs(target.x - start.x) <= self.gameMap.width / 2:
+                east_west = EAST
+            else:
+                east_west = WEST
+        else:
+            if abs(target.x - start.x) <= self.gameMap.width / 2:
+                east_west = WEST
+            else:
+                east_west = EAST
 
-        if start.y < target.y:
-            north_south = SOUTH
-        elif start.y > target.y:
-            north_south = NORTH
+        if start.y == target.y:
+            north_south = STILL
+        elif start.y < target.y:
+            if abs(target.y - start.y) <= self.gameMap.height / 2:
+                north_south = SOUTH
+            else:
+                north_south = NORTH
+        else:
+            if abs(target.y - start.y) <= self.gameMap.height / 2:
+                north_south = NORTH
+            else:
+                north_south = SOUTH
 
         # know the deisred direction, check if either is owned by self
         logging.debug("directions available from %s move %d %d", start, north_south , east_west)
 
-        for direction in (north_south, east_west):
-            if direction != STILL:
-                logging.debug("possible direction was not STILL %d", direction)
-                site = self.gameMap.getSite(start, direction)
+        #flip a coin here to see which direction to test first
+        if random.random() > 0.5:
+            test_directions = (north_south, east_west)
+        else:
+            test_directions = (east_west, north_south)
 
-                logging.debug("possible site is owned by us or is the target, move to there")
-                # return this move
+        for direction in test_directions:
+            if direction != STILL:
                 return Move(start, direction)
 
         return None
