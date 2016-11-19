@@ -3,4 +3,5 @@ visualizer
 .idea
 .DS_STORE
 __pycache__
-*.log
+submissions
+logs
