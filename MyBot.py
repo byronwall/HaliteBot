@@ -10,7 +10,7 @@ haliteBot.setMyId(myID)
 sendInit("byronwall-halite-1")
 
 LOG_FILENAME = str(int(time.time())) + "-" + str(myID) + '.log'
-logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
+logging.basicConfig(filename="logs/" + LOG_FILENAME, level=logging.DEBUG)
 logging.debug('This message should go to the log file')
 
 while True:
