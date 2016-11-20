@@ -1,5 +1,6 @@
 from hlt import *
 import logging
+from typing import Set
 
 
 class HaliteBotCode:
@@ -31,36 +32,28 @@ class HaliteBotCode:
 
     def updateSiteTarget(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
-        borderSites = self.getBorderOfCurrentSpaces()
+        border_sites = self.getBorderOfCurrentSpaces()
 
-        # actual max is 255
-        minStrength = 256
-        minLocation = None
+        # loop through owned pieces and make the calls to move them
+        for location in self.ownedSites:
 
-        for (x, y) in borderSites:
-            location = Location(x, y)
+            # find the closest border spot
+            minDistance = 1000
+            minLocation = None
+            for border_loc in border_sites:
+                distance = self.gameMap.getDistance(border_loc, location)
+                if distance < minDistance:
+                    minDistance = distance
+                    minLocation = border_loc
+
+            # test if piece has the strength to take it over
+            border_site = self.gameMap.getSite(minLocation)
             site = self.gameMap.getSite(location)
 
-            if site.strength < minStrength:
-                minLocation = location
-                minStrength = site.strength
-
-        logging.debug("minimum site located at %d,%d" % (minLocation.x, minLocation.y))
-
-        # know where to go, need to figure out how/when to get there
-
-        framesUntilMove = self.getFramesForStrength(minStrength)
-
-        if framesUntilMove == 0:
-            logging.debug("have the strength to take a site, add the moves")
-
-            # loop through owned pieces and make the calls to move them
-            for location in self.ownedSites:
+            # this random is a step to allow for making a move anyways
+            if site.strength >= border_site.strength or random.random() < 0.05:
+                # if so, move that direction
                 move = self.getNextMove(location, minLocation)
-
-                if self.gameMap.getSite(location).strength == 0:
-                    # skip a move if no strength
-                    continue
 
                 logging.debug("move to make %s", move)
 
@@ -161,7 +154,7 @@ class HaliteBotCode:
 
         return 0 if frames < 0 else frames + 1
 
-    def getBorderOfCurrentSpaces(self) -> set:
+    def getBorderOfCurrentSpaces(self) -> Set[Location]:
         # this will determine the spaces that border the owned pieces
         # iterate through the spaces
 
@@ -188,7 +181,7 @@ class HaliteBotCode:
                 for direction in DIRECTIONS:
                     # if a neighbor is owned by self, this is a neighbor, add to set
                     if self.gameMap.getSite(location, direction).owner == self.id:
-                        borderSites.add((x, y))
+                        borderSites.add(location)
                         mapChar = "*"
                         break
 
