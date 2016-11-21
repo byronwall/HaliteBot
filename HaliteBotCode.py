@@ -5,18 +5,15 @@ from typing import Set
 
 class HaliteBotCode:
     def __init__(self, game_map: GameMap):
-        self.gameMap = game_map
-        self.ownedSites = set()
-        self.movesThisFrame = []
+        self.game_map = game_map
+        self.owned_sites = set()
+        self.moves_this_frame = []
 
     def update(self, game_map: GameMap):
-        self.gameMap = game_map
-        # add some other code here as well to update the model
-        # TODO check if the map is updated automatically by ref
-        # this will called each frame
+        self.game_map = game_map
 
         logging.debug("reset the moves")
-        self.movesThisFrame = []
+        self.moves_this_frame = []
 
         logging.debug("update owned sites")
         self.updateListOfOwnedSites()
@@ -35,71 +32,66 @@ class HaliteBotCode:
         border_sites = self.getBorderOfCurrentSpaces()
 
         # loop through owned pieces and make the calls to move them
-        for location in self.ownedSites:
+        for location in self.owned_sites:
 
             # find the closest border spot
-            minDistance = 1000
-            minLocation = None
-            minStrength = 256
+            min_distance = 1000
+            min_location = None
+            min_strength = 256
 
-            zeroLocation = None
+            zero_location = None
 
             for border_loc in border_sites:
-                distance = self.gameMap.getDistance(border_loc, location)
+                distance = self.game_map.getDistance(border_loc, location)
 
-                border_site = self.gameMap.getSite(border_loc)
+                border_site = self.game_map.getSite(border_loc)
                 border_strength = border_site.strength
 
                 if border_strength == 0:
-                    zeroLocation = border_loc
+                    zero_location = border_loc
                     continue
 
-                if distance < minDistance or (distance == minDistance and border_strength < minStrength):
-                    minDistance = distance
-                    minLocation = border_loc
-                    minStrength = border_site.strength
-
+                if distance < min_distance or (distance == min_distance and border_strength < min_strength):
+                    min_distance = distance
+                    min_location = border_loc
+                    min_strength = border_site.strength
 
             # allow the zero move if it's the only choice
-            if minLocation is None and zeroLocation is not None:
-                minLocation = zeroLocation
+            if min_location is None and zero_location is not None:
+                min_location = zero_location
 
-            if minLocation is None:
+            if min_location is None:
                 continue
 
-            border_site = self.gameMap.getSite(minLocation)
-            site = self.gameMap.getSite(location)
+            border_site = self.game_map.getSite(min_location)
+            site = self.game_map.getSite(location)
 
             # this random is a step to allow for making a move anyways
             if site.strength > border_site.strength or random.random() < 0.05:
                 # if so, move that direction
-                move = self.getNextMove(location, minLocation)
+                move = self.getNextMove(location, min_location)
 
                 logging.debug("move to make %s", move)
 
                 if move != None:
-                    self.movesThisFrame.append(move)
+                    self.moves_this_frame.append(move)
 
         return
 
-    def getNextMove(self, start:Location, target: Location) -> Move:
+    def getNextMove(self, start: Location, target: Location) -> Move:
 
         # this will figure out how to get to the desired location, moving only through owned territory
 
-        # get the desired direction(s)
-        north_south = STILL
-        east_west = STILL
-
-        #these need to handle going around the edge
+        # get the desired direction(s), handling the edges
         if start.x == target.x:
             east_west = STILL
         elif start.x < target.x:
-            if abs(target.x - start.x) <= self.gameMap.width / 2:
+            if abs(target.x - start.x) <= self.game_map.width / 2:
                 east_west = EAST
             else:
                 east_west = WEST
         else:
-            if abs(target.x - start.x) <= self.gameMap.width / 2:
+            if abs(target.x - start.x) <= self.game_map.width / 2:
                 east_west = WEST
             else:
                 east_west = EAST
@@ -107,20 +99,20 @@ class HaliteBotCode:
         if start.y == target.y:
             north_south = STILL
         elif start.y < target.y:
-            if abs(target.y - start.y) <= self.gameMap.height / 2:
+            if abs(target.y - start.y) <= self.game_map.height / 2:
                 north_south = SOUTH
             else:
                 north_south = NORTH
         else:
-            if abs(target.y - start.y) <= self.gameMap.height / 2:
+            if abs(target.y - start.y) <= self.game_map.height / 2:
                 north_south = NORTH
             else:
                 north_south = SOUTH
 
         # know the deisred direction, check if either is owned by self
-        logging.debug("directions available from %s move %d %d", start, north_south , east_west)
+        logging.debug("directions available from %s move %d %d", start, north_south, east_west)
 
-        #flip a coin here to see which direction to test first
+        # flip a coin here to see which direction to test first
         if random.random() > 0.5:
             test_directions = (north_south, east_west)
         else:
@@ -134,46 +126,47 @@ class HaliteBotCode:
 
     def updateListOfOwnedSites(self):
 
-        self.ownedSites = list()
+        self.owned_sites = list()
 
         # this will update the list of sites that are owned by self (will contain locations)
-        for x in range(self.gameMap.width):
-            for y in range(self.gameMap.height):
+        for x in range(self.game_map.width):
+            for y in range(self.game_map.height):
 
                 location = Location(x, y)
-                site = self.gameMap.getSite(location)
+                site = self.game_map.getSite(location)
 
                 if site.owner == self.id:
-                    self.ownedSites.append(location)
-                    logging.debug("added owned site %s with strength %d ", location, self.gameMap.getSite(location).strength)
+                    self.owned_sites.append(location)
+                    logging.debug("added owned site %s with strength %d ", location,
+                                  self.game_map.getSite(location).strength)
 
         return
 
     def getFramesForStrength(self, strength: int) -> int:
         # this will determine how far out in time is needed to have a total movable strength
 
-        prodTotal = 0
-        strengthAvailable = 0
+        prod_total = 0
+        strength_available = 0
 
         # get a sum of all the production
-        for location in self.ownedSites:
+        for location in self.owned_sites:
             logging.debug("own that site")
-            site = self.gameMap.getSite(location)
-            prodTotal += site.production
+            site = self.game_map.getSite(location)
+            prod_total += site.production
 
             logging.debug("owned site at %s", location)
-            logging.debug("strengthAvail = %d" % strengthAvailable)
+            logging.debug("strengthAvail = %d" % strength_available)
             logging.debug("strength = %d" % site.strength)
 
-            strengthAvailable += site.strength
+            strength_available += site.strength
 
-        logging.debug("info for strength needed %d %d %d" % (strength, strengthAvailable, prodTotal))
+        logging.debug("info for strength needed %d %d %d" % (strength, strength_available, prod_total))
 
         # divide that number by strength desired
-        if prodTotal == 0:
+        if prod_total == 0:
             return 100
 
-        frames = (strength - strengthAvailable) / prodTotal
+        frames = (strength - strength_available) / prod_total
 
         return 0 if frames < 0 else frames + 1
 
@@ -181,36 +174,36 @@ class HaliteBotCode:
         # this will determine the spaces that border the owned pieces
         # iterate through the spaces
 
-        borderSites = set()
+        border_sites = set()
 
         logging.debug("inside the getBorderCall, myID = %d" % self.id)
 
-        mapStr = "\n"
+        map_str = "\n"
 
-        for y in range(self.gameMap.height):
-            for x in range(self.gameMap.width):
+        for y in range(self.game_map.height):
+            for x in range(self.game_map.width):
 
-                mapChar = "O"
+                map_char = "O"
                 location = Location(x, y)
-                site = self.gameMap.getSite(location)
+                site = self.game_map.getSite(location)
 
                 # skip if already found or if owned by self
-                if (x, y) in borderSites or site.owner == self.id:
+                if (x, y) in border_sites or site.owner == self.id:
                     if site.owner == self.id:
                         logging.debug("border found owned site at %s", location)
-                        mapStr += "#"
+                        map_str += "#"
                     continue
 
                 for direction in DIRECTIONS:
                     # if a neighbor is owned by self, this is a neighbor, add to set
-                    if self.gameMap.getSite(location, direction).owner == self.id:
-                        borderSites.add(location)
-                        mapChar = "*"
+                    if self.game_map.getSite(location, direction).owner == self.id:
+                        border_sites.add(location)
+                        map_char = "*"
                         break
 
-                mapStr += mapChar
-            mapStr += "\n"
-        logging.debug(mapStr)
+                map_str += map_char
+            map_str += "\n"
+        logging.debug(map_str)
 
         # do something with the border sites
-        return borderSites
+        return border_sites

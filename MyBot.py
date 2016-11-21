@@ -27,6 +27,7 @@ logging.basicConfig(filename="logs/" + LOG_FILENAME, level=logging.DEBUG)
 user_name = os.environ.get("USER")
 if user_name != "byronwall":
     logging.disable(logging.CRITICAL)
+else:
     SHOULD_PROFILE = True
 
 logging.debug('This message should go to the log file')
@@ -43,7 +44,7 @@ while True:
     else:
         haliteBot.update(gameMap)
 
-    moves = haliteBot.movesThisFrame
+    moves = haliteBot.moves_this_frame
 
     logging.debug("moves to make %s", moves)
 
