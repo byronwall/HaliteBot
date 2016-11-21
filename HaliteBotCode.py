@@ -1,10 +1,14 @@
+from typing import Dict
+from typing import List
+
 from hlt import *
 import logging
 from typing import Set
 
 
 class HaliteBotCode:
-    def __init__(self, game_map: GameMap):
+    def __init__(self, game_map: GameMap, id: int):
+        self.id = id
         self.game_map = game_map
         self.owned_sites = set()
         self.moves_this_frame = []
@@ -23,13 +27,15 @@ class HaliteBotCode:
 
         return
 
-    def setMyId(self, id: int):
-        self.id = id
-        return
-
     def updateSiteTarget(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
         border_sites = self.getBorderOfCurrentSpaces()
+
+        # create a dict to assoc border sites
+        border_assoc = dict()  # type: Dict[Location, List[Location]]
+
+        for border_loc in border_sites:
+            border_assoc[border_loc] = []
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
@@ -39,10 +45,16 @@ class HaliteBotCode:
             min_location = None
             min_strength = 256
 
+            loc_site = self.game_map.getSite(location)
+
             zero_location = None
 
             for border_loc in border_sites:
                 distance = self.game_map.getDistance(border_loc, location)
+
+                # put a threshold on min distance
+                if distance <= 2:
+                    distance = 0
 
                 border_site = self.game_map.getSite(border_loc)
                 border_strength = border_site.strength
@@ -56,25 +68,36 @@ class HaliteBotCode:
                     min_location = border_loc
                     min_strength = border_site.strength
 
-            # allow the zero move if it's the only choice
+            # know the target border site, add to dict
+                    # allow the zero move if it's the only choice
             if min_location is None and zero_location is not None:
                 min_location = zero_location
 
-            if min_location is None:
-                continue
+            if min_location is not None and loc_site.strength > 0:
+                border_assoc[min_location].append(location)
 
-            border_site = self.game_map.getSite(min_location)
-            site = self.game_map.getSite(location)
+        # iterate through the border sites now to determine if to move
+
+        for border_loc, locations in border_assoc.items():
+
+            # get the sum of the strengths
+            total_strength = 0  #type: int
+            for location in locations:
+                total_strength += self.game_map.getSite(location).strength
+
+            border_site = self.game_map.getSite(border_loc)
 
             # this random is a step to allow for making a move anyways
-            if site.strength > border_site.strength or random.random() < 0.05:
+            if total_strength > border_site.strength or random.random() < 0.05:
                 # if so, move that direction
-                move = self.getNextMove(location, min_location)
 
-                logging.debug("move to make %s", move)
+                for location in locations:
+                    move = self.getNextMove(location, border_loc)
 
-                if move != None:
-                    self.moves_this_frame.append(move)
+                    logging.debug("move to make %s", move)
+
+                    if move != None:
+                        self.moves_this_frame.append(move)
 
         return
 

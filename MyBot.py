@@ -8,8 +8,8 @@ from HaliteBotCode import *
 import cProfile
 
 myID, gameMap = getInit()
-haliteBot = HaliteBotCode(gameMap)
-haliteBot.setMyId(myID)
+haliteBot = HaliteBotCode(gameMap, myID)
+
 sendInit("byronwall-halite-1")
 
 if not os.path.isdir("logs"):
