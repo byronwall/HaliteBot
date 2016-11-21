@@ -40,18 +40,38 @@ class HaliteBotCode:
             # find the closest border spot
             minDistance = 1000
             minLocation = None
+            minStrength = 256
+
+            zeroLocation = None
+
             for border_loc in border_sites:
                 distance = self.gameMap.getDistance(border_loc, location)
-                if distance < minDistance:
+
+                border_site = self.gameMap.getSite(border_loc)
+                border_strength = border_site.strength
+
+                if border_strength == 0:
+                    zeroLocation = border_loc
+                    continue
+
+                if distance < minDistance or (distance == minDistance and border_strength < minStrength):
                     minDistance = distance
                     minLocation = border_loc
+                    minStrength = border_site.strength
 
-            # test if piece has the strength to take it over
+
+            # allow the zero move if it's the only choice
+            if minLocation is None and zeroLocation is not None:
+                minLocation = zeroLocation
+
+            if minLocation is None:
+                continue
+
             border_site = self.gameMap.getSite(minLocation)
             site = self.gameMap.getSite(location)
 
             # this random is a step to allow for making a move anyways
-            if site.strength >= border_site.strength or random.random() < 0.05:
+            if site.strength > border_site.strength or random.random() < 0.05:
                 # if so, move that direction
                 move = self.getNextMove(location, minLocation)
 
@@ -150,6 +170,9 @@ class HaliteBotCode:
         logging.debug("info for strength needed %d %d %d" % (strength, strengthAvailable, prodTotal))
 
         # divide that number by strength desired
+        if prodTotal == 0:
+            return 100
+
         frames = (strength - strengthAvailable) / prodTotal
 
         return 0 if frames < 0 else frames + 1

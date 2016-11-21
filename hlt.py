@@ -85,29 +85,31 @@ class GameMap:
         return math.atan2(dy, dx)
 
     def getLocation(self, loc, direction) -> Location:
-        l = copy.deepcopy(loc)
+        x = loc.x
+        y = loc.y
+
         if direction != STILL:
             if direction == NORTH:
-                if l.y == 0:
-                    l.y = self.height - 1
+                if y == 0:
+                    y = self.height - 1
                 else:
-                    l.y -= 1
+                    y -= 1
             elif direction == EAST:
-                if l.x == self.width - 1:
-                    l.x = 0
+                if x == self.width - 1:
+                    x = 0
                 else:
-                    l.x += 1
+                    x += 1
             elif direction == SOUTH:
-                if l.y == self.height - 1:
-                    l.y = 0
+                if y == self.height - 1:
+                    y = 0
                 else:
-                    l.y += 1
+                    y += 1
             elif direction == WEST:
-                if l.x == 0:
-                    l.x = self.width - 1
+                if x == 0:
+                    x = self.width - 1
                 else:
-                    l.x -= 1
-        return l
+                    x -= 1
+        return Location(x,y)
 
     def getSite(self, l, direction=STILL) -> Site:
         l = self.getLocation(l, direction)
