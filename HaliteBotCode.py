@@ -68,7 +68,7 @@ class HaliteBotCode:
                     min_location = border_loc
                     min_strength = border_site.strength
 
-            # know the target border site, add to dict
+                    # know the target border site, add to dict
                     # allow the zero move if it's the only choice
             if min_location is None and zero_location is not None:
                 min_location = zero_location
@@ -81,7 +81,7 @@ class HaliteBotCode:
         for border_loc, locations in border_assoc.items():
 
             # get the sum of the strengths
-            total_strength = 0  #type: int
+            total_strength = 0  # type: int
             for location in locations:
                 total_strength += self.game_map.getSite(location).strength
 
@@ -96,7 +96,7 @@ class HaliteBotCode:
 
                     logging.debug("move to make %s", move)
 
-                    if move != None:
+                    if move is not None:
                         self.moves_this_frame.append(move)
 
         return

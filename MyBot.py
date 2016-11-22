@@ -10,7 +10,7 @@ import cProfile
 myID, gameMap = getInit()
 haliteBot = HaliteBotCode(gameMap, myID)
 
-sendInit("byronwall-halite-1")
+sendInit("byronwall-halite-2")
 
 if not os.path.isdir("logs"):
     os.mkdir("logs")
