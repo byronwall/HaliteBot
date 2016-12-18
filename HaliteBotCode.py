@@ -1,3 +1,4 @@
+import random
 from typing import Dict
 from typing import List
 
@@ -32,7 +33,7 @@ class HaliteBotCode:
         border_sites = self.getBorderOfCurrentSpaces()
 
         # create a dict to assoc border sites
-        border_assoc = dict()  # type: Dict[Location, List[Location]]
+        border_assoc = dict()  # type: Dict[Square, List[Square]]
 
         for border_loc in border_sites:
             border_assoc[border_loc] = []
@@ -45,18 +46,18 @@ class HaliteBotCode:
             min_location = None
             min_strength = 256
 
-            loc_site = self.game_map.getSite(location)
+            loc_site = self.game_map.get_target(location)
 
             zero_location = None
 
             for border_loc in border_sites:
-                distance = self.game_map.getDistance(border_loc, location)
+                distance = self.game_map.get_distance(border_loc, location)
 
                 # put a threshold on min distance
                 if distance <= 2:
                     distance = 0
 
-                border_site = self.game_map.getSite(border_loc)
+                border_site = self.game_map.get_target(border_loc)
                 border_strength = border_site.strength
 
                 if border_strength == 0:
@@ -83,9 +84,9 @@ class HaliteBotCode:
             # get the sum of the strengths
             total_strength = 0  # type: int
             for location in locations:
-                total_strength += self.game_map.getSite(location).strength
+                total_strength += self.game_map.get_target(location).strength
 
-            border_site = self.game_map.getSite(border_loc)
+            border_site = self.game_map.get_target(border_loc)
 
             # this random is a step to allow for making a move anyways
             if total_strength > border_site.strength or random.random() < 0.05:
@@ -101,7 +102,7 @@ class HaliteBotCode:
 
         return
 
-    def getNextMove(self, start: Location, target: Location) -> Move:
+    def getNextMove(self, start: Square, target: Square) -> Move:
 
         # this will figure out how to get to the desired location, moving only through owned territory
 
@@ -152,16 +153,10 @@ class HaliteBotCode:
         self.owned_sites = list()
 
         # this will update the list of sites that are owned by self (will contain locations)
-        for x in range(self.game_map.width):
-            for y in range(self.game_map.height):
-
-                location = Location(x, y)
-                site = self.game_map.getSite(location)
-
-                if site.owner == self.id:
-                    self.owned_sites.append(location)
-                    logging.debug("added owned site %s with strength %d ", location,
-                                  self.game_map.getSite(location).strength)
+        for square in self.game_map:
+            if square.owner == self.id:
+                self.owned_sites.append(square)
+                logging.debug("added owned site %s", square)
 
         return
 
@@ -174,7 +169,7 @@ class HaliteBotCode:
         # get a sum of all the production
         for location in self.owned_sites:
             logging.debug("own that site")
-            site = self.game_map.getSite(location)
+            site = self.game_map.get_target(location)
             prod_total += site.production
 
             logging.debug("owned site at %s", location)
@@ -193,7 +188,7 @@ class HaliteBotCode:
 
         return 0 if frames < 0 else frames + 1
 
-    def getBorderOfCurrentSpaces(self) -> Set[Location]:
+    def getBorderOfCurrentSpaces(self) -> Set[Square]:
         # this will determine the spaces that border the owned pieces
         # iterate through the spaces
 
@@ -201,32 +196,20 @@ class HaliteBotCode:
 
         logging.debug("inside the getBorderCall, myID = %d" % self.id)
 
-        map_str = "\n"
+        for location in self.game_map:
 
-        for y in range(self.game_map.height):
-            for x in range(self.game_map.width):
+            # skip if already found or if owned by self
+            if (location.x, location.y) in border_sites or location.owner == self.id:
+                if location.owner == self.id:
+                    logging.debug("border found owned site at %s", location)
 
-                map_char = "O"
-                location = Location(x, y)
-                site = self.game_map.getSite(location)
+                continue
 
-                # skip if already found or if owned by self
-                if (x, y) in border_sites or site.owner == self.id:
-                    if site.owner == self.id:
-                        logging.debug("border found owned site at %s", location)
-                        map_str += "#"
-                    continue
-
-                for direction in DIRECTIONS:
-                    # if a neighbor is owned by self, this is a neighbor, add to set
-                    if self.game_map.getSite(location, direction).owner == self.id:
-                        border_sites.add(location)
-                        map_char = "*"
-                        break
-
-                map_str += map_char
-            map_str += "\n"
-        logging.debug(map_str)
+            for neighbor in self.game_map.neighbors(location):
+                # if a neighbor is owned by self, this is a neighbor, add to set
+                if neighbor.owner == self.id:
+                    border_sites.add(location)
+                    break
 
         # do something with the border sites
         return border_sites

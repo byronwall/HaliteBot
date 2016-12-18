@@ -1,16 +1,17 @@
 import os
 
-from hlt import *
-from networking import *
+import hlt
+from hlt import NORTH, EAST, SOUTH, WEST, STILL, Move, Square
+
 import logging
 import time
 from HaliteBotCode import *
 import cProfile
 
-myID, gameMap = getInit()
+myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID)
 
-sendInit("byronwall-halite-2")
+hlt.send_init("byronwall-halite-2")
 
 if not os.path.isdir("logs"):
     os.mkdir("logs")
@@ -35,7 +36,7 @@ frame = 1
 
 while True:
 
-    gameMap = getFrame()
+    gameMap.get_frame()
 
     should_profile = (myID == 1) and (frame % 50 == 0) and SHOULD_PROFILE
 
@@ -48,5 +49,6 @@ while True:
 
     logging.debug("moves to make %s", moves)
 
-    sendFrame(moves)
+    hlt.send_frame(moves)
+
     frame += 1
