@@ -5,11 +5,12 @@ from typing import Set
 from hlt import *
 import logging
 
+
 class HaliteBotCode:
     def __init__(self, game_map: GameMap, id: int):
         self.id = id
         self.game_map = game_map
-        self.owned_sites = set() # type: Set[Square]
+        self.owned_sites = set()  # type: Set[Square]
         self.moves_this_frame = []
 
     def update(self, game_map: GameMap):
@@ -33,7 +34,10 @@ class HaliteBotCode:
         edge_squares = set()
 
         # add them to a set if 1 of 4 edges is owned by someone other than self
-        for square in self.owned_sites:
+        for square in self.game_map:
+            if square.owner != self.id:
+                continue
+
             for neighbor in self.game_map.neighbors(square):
                 if neighbor.owner != self.id:
                     edge_squares.add(square)
@@ -49,40 +53,83 @@ class HaliteBotCode:
         # iterate through those to see which way to go
 
         # need some criteria to decide what is best
-        moves_to_make = dict() # type: Dict[Square, int]
+        moves_to_make = dict()  # type: Dict[Square, int]
 
         # will currently assume the goal is to take the easiest place if available
 
         # if not enough strength to get there, will call for help instead and remain still
-        squares_to_process = set() # type: Set[Square]
-        squares_processed = set() # type: Set[Square]
+        squares_to_process = set()  # type: Set[Square]
+        squares_processed = set()  # type: Set[Square]
 
-        help_needed = dict() # type: Dict[Square, int]
+        help_needed = dict()  # type: Dict[Square, int]
 
         for edge_square in edge_squares:
             # get the neighbors, if owned, check if strength is enough to take it
             # if can be taken, make that the move
+            squares_processed.add(edge_square)
 
             for direction, neighbor in enumerate(self.game_map.neighbors(edge_square)):
-                squares_processed.add(edge_square)
                 if neighbor.owner == self.id:
-                    if neighbor not in squares_processed:
-                        squares_to_process.add(neighbor)
-                elif neighbor.owner == 0:
-                    if edge_square.strength > neighbor.strength:
-                        # add the move
-                        moves_to_make[edge_square] = direction
-                    else:
+                    squares_to_process.add(neighbor)
+                elif edge_square.strength > neighbor.strength:
+                    # add the move
+                    # this is a crude step to prevent always going for the weak square
+                    if neighbor.strength == 0 and random.random() < 0.5:
+                        continue
+
+                    moves_to_make[edge_square] = direction
+                    if edge_square in help_needed:
+                        help_needed.pop(edge_square)
+                    break
+                else:
+                    if neighbor.strength > 0:
                         need = neighbor.strength - edge_square.strength
                         help_needed[edge_square] = need
-                        logging.debug("added to help needed at %d %d with need %d", edge_square.x, edge_square.y, need)
 
-            # for the self owned neighbors, add them to a set to process next
+                            # for the self owned neighbors, add them to a set to process next
+
+        # determine the average direction to go
+        self_loc = {"x":0, "y":0, "count": 0}
+        for square in self.game_map:
+            if square.owner == self.id:
+                self_loc["x"] += square.x
+                self_loc["y"] += square.y
+                self_loc["count"] += 1
+
+        self_loc["x"] /= self_loc["count"]
+        self_loc["y"] /= self_loc["count"]
+
+        center_x = self.game_map.width / 2
+        center_y = self.game_map.height / 2
+
+        delta_x = self_loc["x"] - center_x
+        delta_y = self_loc["y"] - center_y
+
+        ALL_DIR = STILL
+
+        if abs(delta_x) > abs(delta_y):
+            if delta_x > 0:
+                ALL_DIR = WEST
+            else:
+                ALL_DIR = EAST
+        else:
+            if delta_y > 0:
+                ALL_DIR = NORTH
+            else:
+                ALL_DIR = SOUTH
+
 
         while len(squares_to_process) > 0:
             square_to_process = squares_to_process.pop()
+
+            if square_to_process in squares_processed or square_to_process in moves_to_make:
+                continue
+
             squares_processed.add(square_to_process)
-            logging.debug("processing another interior square")
+
+            #force a move once it's high strength, all go same way
+            if square_to_process.strength > 220:
+                moves_to_make[square_to_process] = ALL_DIR
 
             # check the neighbors of this one, add to the list
             for direction, neighbor in enumerate(self.game_map.neighbors(square_to_process)):
@@ -92,24 +139,32 @@ class HaliteBotCode:
                 if neighbor in help_needed:
                     need = help_needed[neighbor]
                     logging.debug("current neighbor is in need %d %d", neighbor.x, neighbor.y)
-                    if square_to_process.strength > need:
+                    if square_to_process.strength > need and neighbor.strength > 0:
                         moves_to_make[square_to_process] = direction
                         help_needed.pop(neighbor)
                         logging.debug("helping that neighbor")
                         break
-
-
-            # check if this square should go somewhere, help_needed
-
+                    else:
+                        # need to pass the buck on help needed
+                        help_needed[square_to_process] = need - square_to_process.strength
+                        help_needed[neighbor] = need - square_to_process.strength
 
         # do the processing of the interior ones, only if they are not in the edges also
 
-        #take care of the moves
+        # take care of the moves
         for square, direction in moves_to_make.items():
+            # skip the move if going to a interior spot too quickly
+
+            if square.strength == 0:
+                continue
+
+            target = self.game_map.get_target(square, direction)
+            if target.owner == self.id and square.strength < square.production * 10:
+                continue;
+
             self.moves_this_frame.append(Move(square, direction))
 
         return
-
 
     def update_move_targets(self):
         # this will go through spaces and find those that are accessible and then ranked by strength

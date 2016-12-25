@@ -74,7 +74,7 @@ class GameMap:
             combos = ((dx, dy) for dy in range(-n, n+1) for dx in range(-n, n+1) if abs(dx) + abs(dy) <= n)
         return (self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width] for dx, dy in combos if include_self or dx or dy)
 
-    def get_target(self, square, direction = STILL):
+    def get_target(self, square, direction = STILL) -> Square:
         "Returns a single, one-step neighbor in a given direction."
         dx, dy = ((0, -1), (1, 0), (0, 1), (-1, 0), (0, 0))[direction]
         return self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width]
