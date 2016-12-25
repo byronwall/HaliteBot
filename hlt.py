@@ -1,6 +1,7 @@
 import sys
 from collections import namedtuple
 from itertools import chain, zip_longest
+from typing import List
 
 
 def grouper(iterable, n, fillvalue=None):
@@ -18,7 +19,14 @@ def opposite_cardinal(direction):
     return (direction + 2) % 4 if direction != STILL else STILL
 
 
-Square = namedtuple('Square', 'x y owner strength production')
+_square = namedtuple('Square', 'x y owner strength production')
+
+class Square(_square):
+    def __hash__(self):
+        return hash((self.x, self.y))
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
 
 
 Move = namedtuple('Move', 'square direction')
@@ -56,7 +64,7 @@ class GameMap:
         "Allows direct iteration over all squares in the GameMap instance."
         return chain.from_iterable(self.contents)
 
-    def neighbors(self, square, n=1, include_self=False):
+    def neighbors(self, square, n=1, include_self=False)->List[Square]:
         "Iterable over the n-distance neighbors of a given square.  For single-step neighbors, the enumeration index provides the direction associated with the neighbor."
         assert isinstance(include_self, bool)
         assert isinstance(n, int) and n > 0

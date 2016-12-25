@@ -22,9 +22,94 @@ class HaliteBotCode:
         self.update_owned_sites()
 
         logging.debug("update the moves")
-        self.update_move_targets()
+        # self.update_move_targets()
+
+        self.determine_moves_inward()
 
         return
+
+    def get_squares_at_the_edge(self) -> Set[Square]:
+        # iterate through all the pieces
+        edge_squares = set()
+
+        # add them to a set if 1 of 4 edges is owned by someone other than self
+        for square in self.owned_sites:
+            for neighbor in self.game_map.neighbors(square):
+                if neighbor.owner != self.id:
+                    edge_squares.add(square)
+                    break
+
+        return edge_squares
+
+    def determine_moves_inward(self):
+
+        # get the pieces at the border
+        edge_squares = self.get_squares_at_the_edge()
+
+        # iterate through those to see which way to go
+
+        # need some criteria to decide what is best
+        moves_to_make = dict() # type: Dict[Square, int]
+
+        # will currently assume the goal is to take the easiest place if available
+
+        # if not enough strength to get there, will call for help instead and remain still
+        squares_to_process = set() # type: Set[Square]
+        squares_processed = set() # type: Set[Square]
+
+        help_needed = dict() # type: Dict[Square, int]
+
+        for edge_square in edge_squares:
+            # get the neighbors, if owned, check if strength is enough to take it
+            # if can be taken, make that the move
+
+            for direction, neighbor in enumerate(self.game_map.neighbors(edge_square)):
+                squares_processed.add(edge_square)
+                if neighbor.owner == self.id:
+                    if neighbor not in squares_processed:
+                        squares_to_process.add(neighbor)
+                elif neighbor.owner == 0:
+                    if edge_square.strength > neighbor.strength:
+                        # add the move
+                        moves_to_make[edge_square] = direction
+                    else:
+                        need = neighbor.strength - edge_square.strength
+                        help_needed[edge_square] = need
+                        logging.debug("added to help needed at %d %d with need %d", edge_square.x, edge_square.y, need)
+
+            # for the self owned neighbors, add them to a set to process next
+
+        while len(squares_to_process) > 0:
+            square_to_process = squares_to_process.pop()
+            squares_processed.add(square_to_process)
+            logging.debug("processing another interior square")
+
+            # check the neighbors of this one, add to the list
+            for direction, neighbor in enumerate(self.game_map.neighbors(square_to_process)):
+                if neighbor not in squares_processed and neighbor.owner == self.id:
+                    squares_to_process.add(neighbor)
+
+                if neighbor in help_needed:
+                    need = help_needed[neighbor]
+                    logging.debug("current neighbor is in need %d %d", neighbor.x, neighbor.y)
+                    if square_to_process.strength > need:
+                        moves_to_make[square_to_process] = direction
+                        help_needed.pop(neighbor)
+                        logging.debug("helping that neighbor")
+                        break
+
+
+            # check if this square should go somewhere, help_needed
+
+
+        # do the processing of the interior ones, only if they are not in the edges also
+
+        #take care of the moves
+        for square, direction in moves_to_make.items():
+            self.moves_this_frame.append(Move(square, direction))
+
+        return
+
 
     def update_move_targets(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
