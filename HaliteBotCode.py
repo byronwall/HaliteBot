@@ -70,7 +70,12 @@ class HaliteBotCode:
 
             for direction, neighbor in enumerate(self.game_map.neighbors(edge_square)):
                 if neighbor.owner == self.id:
-                    squares_to_process.add(neighbor)
+                    if neighbor in help_needed:
+                        if edge_square.strength > help_needed[neighbor]:
+                            moves_to_make[edge_square] = direction
+                            continue
+                    else:
+                        squares_to_process.add(neighbor)
                 elif edge_square.strength > neighbor.strength:
                     # add the move
                     # this is a crude step to prevent always going for the weak square
@@ -88,37 +93,6 @@ class HaliteBotCode:
 
                             # for the self owned neighbors, add them to a set to process next
 
-        # determine the average direction to go
-        self_loc = {"x":0, "y":0, "count": 0}
-        for square in self.game_map:
-            if square.owner == self.id:
-                self_loc["x"] += square.x
-                self_loc["y"] += square.y
-                self_loc["count"] += 1
-
-        self_loc["x"] /= self_loc["count"]
-        self_loc["y"] /= self_loc["count"]
-
-        center_x = self.game_map.width / 2
-        center_y = self.game_map.height / 2
-
-        delta_x = self_loc["x"] - center_x
-        delta_y = self_loc["y"] - center_y
-
-        ALL_DIR = STILL
-
-        if abs(delta_x) > abs(delta_y):
-            if delta_x > 0:
-                ALL_DIR = WEST
-            else:
-                ALL_DIR = EAST
-        else:
-            if delta_y > 0:
-                ALL_DIR = NORTH
-            else:
-                ALL_DIR = SOUTH
-
-
         while len(squares_to_process) > 0:
             square_to_process = squares_to_process.pop()
 
@@ -126,10 +100,6 @@ class HaliteBotCode:
                 continue
 
             squares_processed.add(square_to_process)
-
-            #force a move once it's high strength, all go same way
-            if square_to_process.strength > 220:
-                moves_to_make[square_to_process] = ALL_DIR
 
             # check the neighbors of this one, add to the list
             for direction, neighbor in enumerate(self.game_map.neighbors(square_to_process)):
@@ -159,7 +129,10 @@ class HaliteBotCode:
                 continue
 
             target = self.game_map.get_target(square, direction)
-            if target.owner == self.id and square.strength < square.production * 10:
+            if target.production == 0:
+                continue
+
+            if square.strength < square.production * 10:
                 continue;
 
             self.moves_this_frame.append(Move(square, direction))
