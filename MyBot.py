@@ -29,7 +29,8 @@ user_name = os.environ.get("USER")
 if user_name != "byronwall":
     logging.disable(logging.CRITICAL)
 else:
-    SHOULD_PROFILE = True
+    # this disables profiling for now... to slow when not needed
+    SHOULD_PROFILE = False
 
 logging.debug('This message should go to the log file')
 frame = 1

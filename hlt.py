@@ -27,6 +27,8 @@ class Square(_square):
 
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
+    def __str__(self):
+        return "(%d,%d)" % (self.x, self.y)
 
 
 Move = namedtuple('Move', 'square direction')
@@ -97,7 +99,8 @@ def send_string(s):
 
 
 def get_string():
-    return sys.stdin.readline().rstrip('\n')
+    next_line = sys.stdin.readline().rstrip('\n')
+    return next_line
 
 
 def get_init():

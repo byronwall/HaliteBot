@@ -172,10 +172,11 @@ class HaliteBotCode:
 
                 border_strength = border_loc.strength
 
-                if border_strength == 0 and distance < zero_distance:
-                    zero_location = border_loc
-                    zero_distance = distance
-                    continue
+                # get a new number for strength from the neighbors of the 0 border
+                if border_strength == 0:
+                    for neighbor in self.game_map.neighbors(border_loc):
+                        if neighbor.owner != self.id:
+                            border_strength += neighbor.strength
 
                 if distance < min_distance or (distance == min_distance and border_strength < min_strength):
                     min_distance = distance
@@ -287,9 +288,6 @@ class HaliteBotCode:
 
             # skip if already found or if owned by self
             if location in border_sites or location.owner == self.id:
-                if location.owner == self.id:
-                    logging.debug("border found owned site at %s", location)
-
                 continue
 
             for neighbor in self.game_map.neighbors(location):
