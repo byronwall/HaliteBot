@@ -1,6 +1,7 @@
 import sys
 from collections import namedtuple
 from itertools import chain, zip_longest
+from typing import List
 
 
 def grouper(iterable, n, fillvalue=None):
@@ -18,7 +19,16 @@ def opposite_cardinal(direction):
     return (direction + 2) % 4 if direction != STILL else STILL
 
 
-Square = namedtuple('Square', 'x y owner strength production')
+_square = namedtuple('Square', 'x y owner strength production')
+
+class Square(_square):
+    def __hash__(self):
+        return hash((self.x, self.y))
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+    def __str__(self):
+        return "(%d,%d)" % (self.x, self.y)
 
 
 Move = namedtuple('Move', 'square direction')
@@ -56,7 +66,7 @@ class GameMap:
         "Allows direct iteration over all squares in the GameMap instance."
         return chain.from_iterable(self.contents)
 
-    def neighbors(self, square, n=1, include_self=False):
+    def neighbors(self, square, n=1, include_self=False)->List[Square]:
         "Iterable over the n-distance neighbors of a given square.  For single-step neighbors, the enumeration index provides the direction associated with the neighbor."
         assert isinstance(include_self, bool)
         assert isinstance(n, int) and n > 0
@@ -66,7 +76,7 @@ class GameMap:
             combos = ((dx, dy) for dy in range(-n, n+1) for dx in range(-n, n+1) if abs(dx) + abs(dy) <= n)
         return (self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width] for dx, dy in combos if include_self or dx or dy)
 
-    def get_target(self, square, direction = STILL):
+    def get_target(self, square, direction = STILL) -> Square:
         "Returns a single, one-step neighbor in a given direction."
         dx, dy = ((0, -1), (1, 0), (0, 1), (-1, 0), (0, 0))[direction]
         return self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width]
@@ -89,7 +99,8 @@ def send_string(s):
 
 
 def get_string():
-    return sys.stdin.readline().rstrip('\n')
+    next_line = sys.stdin.readline().rstrip('\n')
+    return next_line
 
 
 def get_init():
