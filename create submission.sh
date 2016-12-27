@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
-SUBMISSION_NAME="2016 12 25 improved zero strength.zip"
+SUBMISSION_NAME="2016 12 26, improve prod.zip"
 
-zip "$SUBMISSION_NAME" "hlt.py" "MyBot.py" "HaliteBotCode.py"
+zip "submissions/$SUBMISSION_NAME" "hlt.py" "MyBot.py" "HaliteBotCode.py"

@@ -23,9 +23,7 @@ class HaliteBotCode:
         self.update_owned_sites()
 
         logging.debug("update the moves")
-        # self.update_move_targets()
-
-        self.determine_moves_inward()
+        self.update_move_targets()
 
         return
 
@@ -45,83 +43,10 @@ class HaliteBotCode:
 
         return edge_squares
 
-    def determine_moves_inward(self):
+    def process_moves(self, moves_to_make):
 
-        # get the pieces at the border
-        edge_squares = self.get_squares_at_the_edge()
+        # this is not used at the moment, need to bring into the fold
 
-        # iterate through those to see which way to go
-
-        # need some criteria to decide what is best
-        moves_to_make = dict()  # type: Dict[Square, int]
-
-        # will currently assume the goal is to take the easiest place if available
-
-        # if not enough strength to get there, will call for help instead and remain still
-        squares_to_process = set()  # type: Set[Square]
-        squares_processed = set()  # type: Set[Square]
-
-        help_needed = dict()  # type: Dict[Square, int]
-
-        for edge_square in edge_squares:
-            # get the neighbors, if owned, check if strength is enough to take it
-            # if can be taken, make that the move
-            squares_processed.add(edge_square)
-
-            for direction, neighbor in enumerate(self.game_map.neighbors(edge_square)):
-                if neighbor.owner == self.id:
-                    if neighbor in help_needed:
-                        if edge_square.strength > help_needed[neighbor]:
-                            moves_to_make[edge_square] = direction
-                            continue
-                    else:
-                        squares_to_process.add(neighbor)
-                elif edge_square.strength > neighbor.strength:
-                    # add the move
-                    # this is a crude step to prevent always going for the weak square
-                    if neighbor.strength == 0 and random.random() < 0.5:
-                        continue
-
-                    moves_to_make[edge_square] = direction
-                    if edge_square in help_needed:
-                        help_needed.pop(edge_square)
-                    break
-                else:
-                    if neighbor.strength > 0:
-                        need = neighbor.strength - edge_square.strength
-                        help_needed[edge_square] = need
-
-                            # for the self owned neighbors, add them to a set to process next
-
-        while len(squares_to_process) > 0:
-            square_to_process = squares_to_process.pop()
-
-            if square_to_process in squares_processed or square_to_process in moves_to_make:
-                continue
-
-            squares_processed.add(square_to_process)
-
-            # check the neighbors of this one, add to the list
-            for direction, neighbor in enumerate(self.game_map.neighbors(square_to_process)):
-                if neighbor not in squares_processed and neighbor.owner == self.id:
-                    squares_to_process.add(neighbor)
-
-                if neighbor in help_needed:
-                    need = help_needed[neighbor]
-                    logging.debug("current neighbor is in need %d %d", neighbor.x, neighbor.y)
-                    if square_to_process.strength > need and neighbor.strength > 0:
-                        moves_to_make[square_to_process] = direction
-                        help_needed.pop(neighbor)
-                        logging.debug("helping that neighbor")
-                        break
-                    else:
-                        # need to pass the buck on help needed
-                        help_needed[square_to_process] = need - square_to_process.strength
-                        help_needed[neighbor] = need - square_to_process.strength
-
-        # do the processing of the interior ones, only if they are not in the edges also
-
-        # take care of the moves
         for square, direction in moves_to_make.items():
             # skip the move if going to a interior spot too quickly
 
@@ -133,11 +58,33 @@ class HaliteBotCode:
                 continue
 
             if square.strength < square.production * 10:
-                continue;
+                continue
 
             self.moves_this_frame.append(Move(square, direction))
 
         return
+
+    def get_square_value(self, square: Square)->float:
+
+        border_values = list()
+
+        # this needs to determine the value of a site, take the average of the
+        if square.strength == 0:
+            for neighbor in self.game_map.neighbors(square):
+                if neighbor.owner != self.id:
+                    # TODO adapt this to handle the value metric, works for now
+                    border_values.append( self.get_square_metric(neighbor))
+
+        else:
+            border_values.append(self.get_square_metric(square))
+
+        if len(border_values) == 0:
+            border_values.append(1)
+
+        return min(border_values)
+
+    def get_square_metric(self, square: Square):
+        return square.production / (square.strength + 1)
 
     def update_move_targets(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
@@ -146,8 +93,8 @@ class HaliteBotCode:
         # create a dict to assoc border sites
         border_assoc = dict()  # type: Dict[Square, List[Square]]
 
-        for border_loc in border_sites:
-            border_assoc[border_loc] = []
+        for border_square in border_sites:
+            border_assoc[border_square] = []
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
@@ -159,62 +106,52 @@ class HaliteBotCode:
             # find the closest border spot
             min_distance = 1000
             min_location = None
-            min_strength = 256
+            max_value = 0
 
-            zero_distance = 1000
+            # TODO improve the evaluation metric to consider more than just strength
 
-            loc_site = self.game_map.get_target(location)
+            for border_square in border_sites:
+                distance = self.game_map.get_distance(border_square, location)
 
-            zero_location = None
+                # threshold the distance to allow for some movement
+                if distance == 2:
+                    distance = 1
 
-            for border_loc in border_sites:
-                distance = self.game_map.get_distance(border_loc, location)
+                border_value = self.get_square_value(border_square)
 
-                border_strength = border_loc.strength
-
-                # get a new number for strength from the neighbors of the 0 border
-                if border_strength == 0:
-                    for neighbor in self.game_map.neighbors(border_loc):
-                        if neighbor.owner != self.id:
-                            border_strength += neighbor.strength
-
-                if distance < min_distance or (distance == min_distance and border_strength < min_strength):
+                if distance < min_distance or (distance == min_distance and border_value > max_value):
                     min_distance = distance
-                    min_location = border_loc
-                    min_strength = border_loc.strength
-
-            # know the target border site, add to dict
-            # allow the zero move if it's the only choice
-            if min_location is None and zero_location is not None:
-                min_location = zero_location
+                    min_location = border_square
+                    max_value = border_value
 
             # add a check here to see if move should be made
             if min_distance > 4:
                 continue
 
-            if min_location is not None and loc_site.strength > 0:
+            if min_location is not None:
                 border_assoc[min_location].append(location)
 
         # iterate through the border sites now to determine if to move
 
-        for border_loc, locations in border_assoc.items():
+        for border_square, locations in border_assoc.items():
 
             # get the sum of the strengths
             total_strength = 0  # type: int
             for location in locations:
                 total_strength += location.strength
 
-            # this random is a step to allow for making a move anyways
-            if total_strength > border_loc.strength:
+            if total_strength > border_square.strength:
                 # if so, move that direction
 
                 for location in locations:
-                    move = self.get_next_move(location, border_loc)
+                    move = self.get_next_move(location, border_square)
 
                     logging.debug("move to make %s", move)
 
                     if move is not None:
                         self.moves_this_frame.append(move)
+
+        # TODO improve the move selector to not move to 0 production sites
 
         return
 
