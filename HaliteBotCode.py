@@ -12,6 +12,12 @@ class HaliteBotCode:
         self.game_map = game_map
         self.owned_sites = set()  # type: Set[Square]
         self.moves_this_frame = []
+        self.time_at_square = dict() # type: Dict[Square, int]
+        self.expected_strength = dict() # type: Dict[Square, int]
+        self.frame = 0
+
+        for square in self.game_map:
+            self.time_at_square[square] = 0
 
     def update(self, game_map: GameMap):
         self.game_map = game_map
@@ -25,44 +31,38 @@ class HaliteBotCode:
         logging.debug("update the moves")
         self.update_move_targets()
 
-        return
-
-    def get_squares_at_the_edge(self) -> Set[Square]:
-        # iterate through all the pieces
-        edge_squares = set()
-
-        # add them to a set if 1 of 4 edges is owned by someone other than self
-        for square in self.game_map:
-            if square.owner != self.id:
-                continue
-
-            for neighbor in self.game_map.neighbors(square):
-                if neighbor.owner != self.id:
-                    edge_squares.add(square)
-                    break
-
-        return edge_squares
-
-    def process_moves(self, moves_to_make):
-
-        # this is not used at the moment, need to bring into the fold
-
-        for square, direction in moves_to_make.items():
-            # skip the move if going to a interior spot too quickly
-
-            if square.strength == 0:
-                continue
-
-            target = self.game_map.get_target(square, direction)
-            if target.production == 0:
-                continue
-
-            if square.strength < square.production * 10:
-                continue
-
-            self.moves_this_frame.append(Move(square, direction))
+        self.frame += 1
 
         return
+
+    def is_move_allowed(self, move: Move)->bool:
+
+        allow_move = True
+
+        source = move.square
+        target = self.game_map.get_target(source, move.direction)
+
+        # avoid 0 production sites
+        if target.production == 0:
+            allow_move = False
+
+        # must stay at spot to build strength
+        if source.strength < source.production * 5:
+            allow_move = False
+
+        # must stay for one turn to avoid constantly moving
+        if self.time_at_square[source] <= 1:
+            allow_move = False
+
+        # this should prevent large blocks from combining
+        if allow_move:
+            if 300 - self.expected_strength[target] < source.strength:
+                allow_move = False
+            else:
+                self.expected_strength[target] += source.strength
+                self.expected_strength[source] -= source.strength
+
+        return allow_move
 
     def get_square_value(self, square: Square)->float:
 
@@ -71,8 +71,7 @@ class HaliteBotCode:
         # this needs to determine the value of a site, take the average of the
         if square.strength == 0:
             for neighbor in self.game_map.neighbors(square):
-                if neighbor.owner != self.id:
-                    # TODO adapt this to handle the value metric, works for now
+                if neighbor.owner != self.id and neighbor.owner != 0:
                     border_values.append( self.get_square_metric(neighbor))
 
         else:
@@ -98,11 +97,6 @@ class HaliteBotCode:
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
-
-            # these are the check to not make moves
-            if location.strength < location.production * 10:
-                continue
-
             # find the closest border spot
             min_distance = 1000
             min_location = None
@@ -111,6 +105,10 @@ class HaliteBotCode:
             # TODO improve the evaluation metric to consider more than just strength
 
             for border_square in border_sites:
+
+                if border_square.production == 0:
+                    continue
+
                 distance = self.game_map.get_distance(border_square, location)
 
                 # threshold the distance to allow for some movement
@@ -125,7 +123,7 @@ class HaliteBotCode:
                     max_value = border_value
 
             # add a check here to see if move should be made
-            if min_distance > 4:
+            if min_distance > (3 + self.frame / 50):
                 continue
 
             if min_location is not None:
@@ -133,25 +131,31 @@ class HaliteBotCode:
 
         # iterate through the border sites now to determine if to move
 
+        desired_moves = list()
+
         for border_square, locations in border_assoc.items():
 
             # get the sum of the strengths
-            total_strength = 0  # type: int
+            total_strength = 0
             for location in locations:
                 total_strength += location.strength
 
             if total_strength > border_square.strength:
                 # if so, move that direction
-
                 for location in locations:
                     move = self.get_next_move(location, border_square)
 
                     logging.debug("move to make %s", move)
 
                     if move is not None:
-                        self.moves_this_frame.append(move)
+                        desired_moves.append(move)
 
-        # TODO improve the move selector to not move to 0 production sites
+        for move in desired_moves:
+            if self.is_move_allowed(move):
+                self.moves_this_frame.append(move)
+                # reset move counter if leaving own territory
+                if self.game_map.get_target(move.square, move.direction).owner != self.id:
+                    self.time_at_square[move.square] = 0
 
         return
 
@@ -209,7 +213,12 @@ class HaliteBotCode:
         for square in self.game_map:
             if square.owner == self.id:
                 self.owned_sites.append(square)
+                self.time_at_square[square] += 1
+                self.expected_strength[square] = square.strength
                 logging.debug("added owned site %s", square)
+            else:
+                self.time_at_square[square] = 0
+                self.expected_strength[square] = -square.strength
 
         return
 
