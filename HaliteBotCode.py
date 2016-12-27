@@ -66,21 +66,20 @@ class HaliteBotCode:
 
     def get_square_value(self, square: Square)->float:
 
-        border_values = list()
+        border_value = 1000000
 
         # this needs to determine the value of a site, take the average of the
         if square.strength == 0:
             for neighbor in self.game_map.neighbors(square):
                 if neighbor.owner != self.id and neighbor.owner != 0:
-                    border_values.append( self.get_square_metric(neighbor))
+                    metric = self.get_square_metric(neighbor)
+                    if metric < border_value:
+                        border_value = metric
 
         else:
-            border_values.append(self.get_square_metric(square))
+            border_value = self.get_square_metric(square)
 
-        if len(border_values) == 0:
-            border_values.append(1)
-
-        return min(border_values)
+        return border_value
 
     def get_square_metric(self, square: Square):
         return square.production / (square.strength + 1)
@@ -95,6 +94,8 @@ class HaliteBotCode:
         for border_square in border_sites:
             border_assoc[border_square] = []
 
+        max_dist = (3 + self.frame / 50)
+
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             # find the closest border spot
@@ -102,14 +103,15 @@ class HaliteBotCode:
             min_location = None
             max_value = 0
 
-            # TODO improve the evaluation metric to consider more than just strength
-
             for border_square in border_sites:
 
                 if border_square.production == 0:
                     continue
 
                 distance = self.game_map.get_distance(border_square, location)
+
+                if distance > max_dist:
+                    continue
 
                 # threshold the distance to allow for some movement
                 if distance == 2:
@@ -123,7 +125,8 @@ class HaliteBotCode:
                     max_value = border_value
 
             # add a check here to see if move should be made
-            if min_distance > (3 + self.frame / 50):
+
+            if min_distance > max_dist:
                 continue
 
             if min_location is not None:
