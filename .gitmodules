@@ -1,0 +1,3 @@
+[submodule "halite-match-manager"]
+	path = halite-match-manager
+	url = git@github.com:smiley1983/halite-match-manager.git
