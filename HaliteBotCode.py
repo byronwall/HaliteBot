@@ -51,12 +51,12 @@ class HaliteBotCode:
             allow_move = False
 
         # must stay for one turn to avoid constantly moving
-        if self.time_at_square[source] <= 1:
-            allow_move = False
+        #if self.time_at_square[source] <= 1:
+        #    allow_move = False
 
         # this should prevent large blocks from combining
         if allow_move:
-            if 300 - self.expected_strength[target] < source.strength:
+            if 280 - self.expected_strength[target] < source.strength:
                 allow_move = False
             else:
                 self.expected_strength[target] += source.strength
@@ -94,7 +94,7 @@ class HaliteBotCode:
         for border_square in border_sites:
             border_assoc[border_square] = []
 
-        max_dist = (3 + self.frame / 50)
+        desired_moves = dict() # type: Dict[Square, Move]
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
@@ -102,6 +102,20 @@ class HaliteBotCode:
             min_distance = 1000
             min_location = None
             max_value = 0
+
+            # skip if move has been made
+            if location in desired_moves:
+                continue
+
+            max_dist = 3
+            # let the high strength piece roam a bit
+            if location.strength > 220:
+                max_dist = (self.game_map.height + self.game_map.width) / 2
+
+                # if piece has been there for too long, force the neighbors to move
+                if self.time_at_square[location] > location.strength / location.production:
+                    for direction, neighbor in enumerate( self.game_map.neighbors(location)):
+                        desired_moves[neighbor] = Move(neighbor, direction)
 
             for border_square in border_sites:
 
@@ -134,8 +148,6 @@ class HaliteBotCode:
 
         # iterate through the border sites now to determine if to move
 
-        desired_moves = list()
-
         for border_square, locations in border_assoc.items():
 
             # get the sum of the strengths
@@ -151,14 +163,22 @@ class HaliteBotCode:
                     logging.debug("move to make %s", move)
 
                     if move is not None:
-                        desired_moves.append(move)
+                        desired_moves[location] = move
 
-        for move in desired_moves:
-            if self.is_move_allowed(move):
-                self.moves_this_frame.append(move)
-                # reset move counter if leaving own territory
-                if self.game_map.get_target(move.square, move.direction).owner != self.id:
-                    self.time_at_square[move.square] = 0
+        # this allows move to be checked a couple times to see if the situation improves
+        max_check = 5
+        times_checked = 0
+        while len(desired_moves) > 0 and times_checked < max_check:
+            for key in list(desired_moves.keys()):
+                move = desired_moves[key]
+                if self.is_move_allowed(move):
+                    desired_moves.pop(key)
+                    self.moves_this_frame.append(move)
+                    # reset move counter if leaving own territory
+                    if self.game_map.get_target(move.square, move.direction).owner != self.id:
+                        self.time_at_square[move.square] = 0
+
+            times_checked += 1
 
         return
 

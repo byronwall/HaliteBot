@@ -11,7 +11,7 @@ import cProfile
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID)
 
-hlt.send_init("byronwall-halite-5")
+hlt.send_init("byronwall-halite-6")
 
 if not os.path.isdir("logs"):
     os.mkdir("logs")
