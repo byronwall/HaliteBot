@@ -12,8 +12,8 @@ class HaliteBotCode:
         self.game_map = game_map
         self.owned_sites = set()  # type: Set[Square]
         self.moves_this_frame = []
-        self.time_at_square = dict() # type: Dict[Square, int]
-        self.expected_strength = dict() # type: Dict[Square, int]
+        self.time_at_square = dict()  # type: Dict[Square, int]
+        self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
 
         for square in self.game_map:
@@ -35,7 +35,7 @@ class HaliteBotCode:
 
         return
 
-    def is_move_allowed(self, move: Move)->bool:
+    def is_move_allowed(self, move: Move) -> bool:
 
         allow_move = True
 
@@ -51,7 +51,7 @@ class HaliteBotCode:
             allow_move = False
 
         # must stay for one turn to avoid constantly moving
-        #if self.time_at_square[source] <= 1:
+        # if self.time_at_square[source] <= 1:
         #    allow_move = False
 
         # this should prevent large blocks from combining
@@ -64,17 +64,20 @@ class HaliteBotCode:
 
         return allow_move
 
-    def get_square_value(self, square: Square)->float:
+    def get_square_value(self, square: Square) -> float:
 
         border_value = 1000000
 
         # this needs to determine the value of a site, take the average of the
         if square.strength == 0:
-            for neighbor in self.game_map.neighbors(square):
-                if neighbor.owner != self.id and neighbor.owner != 0:
-                    metric = self.get_square_metric(neighbor)
-                    if metric < border_value:
-                        border_value = metric
+            border_value = sum(
+                min(neighbor.strength, square.strength) for neighbor in self.game_map.neighbors(square) if
+                neighbor.owner not in [0, self.id])
+
+            if border_value == 0:
+                # nothing to attack
+                border_value = min((self.get_square_metric(neighbor) for neighbor in self.game_map.neighbors(square) if
+                                   neighbor.owner == 0),default=0)
 
         else:
             border_value = self.get_square_metric(square)
@@ -94,7 +97,7 @@ class HaliteBotCode:
         for border_square in border_sites:
             border_assoc[border_square] = []
 
-        desired_moves = dict() # type: Dict[Square, Move]
+        desired_moves = dict()  # type: Dict[Square, Move]
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
@@ -114,7 +117,7 @@ class HaliteBotCode:
 
                 # if piece has been there for too long, force the neighbors to move
                 if self.time_at_square[location] > location.strength / location.production:
-                    for direction, neighbor in enumerate( self.game_map.neighbors(location)):
+                    for direction, neighbor in enumerate(self.game_map.neighbors(location)):
                         desired_moves[neighbor] = Move(neighbor, direction)
 
             for border_square in border_sites:
