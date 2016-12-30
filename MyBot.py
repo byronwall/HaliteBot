@@ -1,38 +1,37 @@
 import os
-
 import hlt
-from hlt import NORTH, EAST, SOUTH, WEST, STILL, Move, Square
-
 import logging
 import time
-from HaliteBotCode import *
 import cProfile
+import argparse
+from HaliteBotCode import *
+
+parser = argparse.ArgumentParser(description='Description of your program')
+parser.add_argument('-l','--logging', help='Log output from the bot', action="store_true")
+parser.add_argument('-p','--profile', help='Profile the bot every 50 cycles', action="store_true")
+args = vars(parser.parse_args())
 
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID)
 
-hlt.send_init("byronwall-halite-6")
+hlt.send_init("byronwall-halite-7")
 
-if not os.path.isdir("logs"):
-    os.mkdir("logs")
+# decide if logging should happen
+if args["logging"]:
+    if not os.path.isdir("logs"):
+        os.mkdir("logs")
 
-if not os.path.isdir("profiles"):
-    os.mkdir("profiles")
-
-SHOULD_PROFILE = False
-
-LOG_FILENAME = str(int(time.time())) + "-" + str(myID) + '.log'
-logging.basicConfig(filename="logs/" + LOG_FILENAME, level=logging.DEBUG)
-
-#disbale logging when running on the server
-user_name = os.environ.get("USER")
-if user_name != "byronwall":
-    logging.disable(logging.CRITICAL)
+    LOG_FILENAME = str(int(time.time())) + "-" + str(myID) + '.log'
+    logging.basicConfig(filename="logs/" + LOG_FILENAME, level=logging.DEBUG)
 else:
-    # this disables profiling for now... to slow when not needed
-    SHOULD_PROFILE = False
+    logging.disable(logging.CRITICAL)
 
-logging.debug('This message should go to the log file')
+# decide if profiling should happen
+SHOULD_PROFILE = args["profile"]
+if SHOULD_PROFILE:
+    if not os.path.isdir("profiles"):
+        os.mkdir("profiles")
+
 frame = 1
 
 while True:
@@ -40,16 +39,13 @@ while True:
     gameMap.get_frame()
 
     should_profile = (myID == 1) and (frame % 50 == 0) and SHOULD_PROFILE
-
     if should_profile:
         cProfile.run("haliteBot.update(gameMap)", "profiles/profile-" + str(frame) + ".pyprof")
     else:
         haliteBot.update(gameMap)
 
     moves = haliteBot.moves_this_frame
-
     logging.debug("moves to make %s", moves)
-
     hlt.send_frame(moves)
 
     frame += 1
