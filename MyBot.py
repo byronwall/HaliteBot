@@ -20,7 +20,7 @@ args = vars(parser.parse_args())
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID, args)
 
-bot_name = "byronwall-halite-7" if args["name"] is None else args["name"]
+bot_name = args.get("name", "byronwall-7")
 hlt.send_init(bot_name)
 
 # decide if logging should happen

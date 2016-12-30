@@ -16,8 +16,8 @@ class HaliteBotCode:
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
 
-        self.DISTANCE_THRESHOLD = 2 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
-        self.MAX_DISTANCE = 3 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
+        self.DISTANCE_THRESHOLD = options.get("DISTANCE_THRESHOLD", 2)
+        self.MAX_DISTANCE = options.get("MAX_DISTANCE", 3)
 
         for square in self.game_map:
             self.time_at_square[square] = 0
