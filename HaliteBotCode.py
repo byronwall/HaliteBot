@@ -7,7 +7,7 @@ import logging
 
 
 class HaliteBotCode:
-    def __init__(self, game_map: GameMap, id: int):
+    def __init__(self, game_map: GameMap, id: int, options = dict()):
         self.id = id
         self.game_map = game_map
         self.owned_sites = set()  # type: Set[Square]
@@ -15,6 +15,9 @@ class HaliteBotCode:
         self.time_at_square = dict()  # type: Dict[Square, int]
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
+
+        self.DISTANCE_THRESHOLD = 2 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
+        self.MAX_DISTANCE = 3 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
 
         for square in self.game_map:
             self.time_at_square[square] = 0
@@ -110,7 +113,7 @@ class HaliteBotCode:
             if location in desired_moves:
                 continue
 
-            max_dist = 3
+            max_dist = self.MAX_DISTANCE
             # let the high strength piece roam a bit
             if location.strength > 220:
                 max_dist = (self.game_map.height + self.game_map.width) / 2
@@ -131,7 +134,7 @@ class HaliteBotCode:
                     continue
 
                 # threshold the distance to allow for some movement
-                if distance == 2:
+                if distance <= self.DISTANCE_THRESHOLD:
                     distance = 1
 
                 border_value = self.get_square_value(border_square)
