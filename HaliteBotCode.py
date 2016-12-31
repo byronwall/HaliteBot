@@ -7,7 +7,7 @@ import logging
 
 
 class HaliteBotCode:
-    def __init__(self, game_map: GameMap, id: int, options = dict()):
+    def __init__(self, game_map: GameMap, id: int, options=dict()):
         self.id = id
         self.game_map = game_map
         self.owned_sites = set()  # type: Set[Square]
@@ -16,8 +16,8 @@ class HaliteBotCode:
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
 
-        self.DISTANCE_THRESHOLD = options.get("DISTANCE_THRESHOLD", 2)
-        self.MAX_DISTANCE = options.get("MAX_DISTANCE", 3)
+        self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
+        self.MAX_DISTANCE = 11 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
 
         for square in self.game_map:
             self.time_at_square[square] = 0
@@ -73,14 +73,14 @@ class HaliteBotCode:
 
         # this needs to determine the value of a site, take the average of the
         if square.strength == 0:
-            border_value = sum(
-                min(neighbor.strength, square.strength) for neighbor in self.game_map.neighbors(square) if
-                neighbor.owner not in [0, self.id])
+            border_value = sum(neighbor.strength
+                               for neighbor in self.game_map.neighbors(square) if
+                               neighbor.owner not in [0, self.id])
 
             if border_value == 0:
                 # nothing to attack
                 border_value = min((self.get_square_metric(neighbor) for neighbor in self.game_map.neighbors(square) if
-                                   neighbor.owner == 0),default=0)
+                                    neighbor.owner == 0), default=0)
 
         else:
             border_value = self.get_square_metric(square)
