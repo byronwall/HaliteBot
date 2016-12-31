@@ -1,7 +1,7 @@
 import sys
 from collections import namedtuple
 from itertools import chain, zip_longest
-from typing import List
+from typing import List, Iterable
 
 
 def grouper(iterable, n, fillvalue=None):
@@ -66,7 +66,7 @@ class GameMap:
         "Allows direct iteration over all squares in the GameMap instance."
         return chain.from_iterable(self.contents)
 
-    def neighbors(self, square, n=1, include_self=False)->List[Square]:
+    def neighbors(self, square: Square, n: int = 1, include_self: bool = False)-> Iterable[Square]:
         "Iterable over the n-distance neighbors of a given square.  For single-step neighbors, the enumeration index provides the direction associated with the neighbor."
         assert isinstance(include_self, bool)
         assert isinstance(n, int) and n > 0

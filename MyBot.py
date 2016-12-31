@@ -13,6 +13,7 @@ parser.add_argument('-l','--logging', help='Log output from the bot', action="st
 parser.add_argument('-p','--profile', help='Profile the bot every 50 cycles', action="store_true")
 parser.add_argument('-D','--DISTANCE_THRESHOLD', help='Max distance to count as 1', type=int)
 parser.add_argument('-M','--MAX_DISTANCE', help='Max distance to allow move', type=int)
+parser.add_argument('-A','--ATTACK_DIST', help='Distance to force attack if available', type=int)
 parser.add_argument('-n','--name', help='Bot name')
 
 args = vars(parser.parse_args())

@@ -18,6 +18,7 @@ class HaliteBotCode:
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 11 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
+        self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
 
         for square in self.game_map:
             self.time_at_square[square] = 0
@@ -45,10 +46,6 @@ class HaliteBotCode:
         source = move.square
         target = self.game_map.get_target(source, move.direction)
 
-        # avoid 0 production sites
-        if target.production == 0:
-            allow_move = False
-
         # must stay at spot to build strength
         if source.strength < source.production * 5:
             allow_move = False
@@ -66,6 +63,10 @@ class HaliteBotCode:
                 self.expected_strength[source] -= source.strength
 
         return allow_move
+
+    def can_attack_square(self, square:Square)->bool:
+        # this will return a bool indicating if the square can be attacked
+        return any(neighbor.owner not in [0,self.id] for neighbor in self.game_map.neighbors(square))
 
     def get_square_value(self, square: Square) -> float:
 
@@ -102,6 +103,11 @@ class HaliteBotCode:
 
         desired_moves = dict()  # type: Dict[Square, Move]
 
+        # update the can attack dict
+        can_attack = dict() # type: Dict[Square, bool]
+        for border_square in border_sites:
+            can_attack[border_square] =  self.can_attack_square(border_square)
+
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             # find the closest border spot
@@ -109,35 +115,30 @@ class HaliteBotCode:
             min_location = None
             max_value = 0
 
-            # skip if move has been made
-            if location in desired_moves:
-                continue
-
-            max_dist = self.MAX_DISTANCE
-            # let the high strength piece roam a bit
-            if location.strength > 220:
-                max_dist = (self.game_map.height + self.game_map.width) / 2
-
-                # if piece has been there for too long, force the neighbors to move
-                if self.time_at_square[location] > location.strength / location.production:
-                    for direction, neighbor in enumerate(self.game_map.neighbors(location)):
-                        desired_moves[neighbor] = Move(neighbor, direction)
+            must_attack = False
 
             for border_square in border_sites:
 
-                if border_square.production == 0:
+                if must_attack and not can_attack[border_square]:
                     continue
 
                 distance = self.game_map.get_distance(border_square, location)
 
-                if distance > max_dist:
+                if distance > self.MAX_DISTANCE:
                     continue
+
+                # reset the best spot if this is the first to be attackable
+                if distance < self.ATTACK_DIST and can_attack[border_square] and not must_attack:
+                    min_distance = 1000
+                    min_location = None
+                    max_value = 0
+                    must_attack = True
 
                 # threshold the distance to allow for some movement
                 if distance <= self.DISTANCE_THRESHOLD:
                     distance = 1
 
-                border_value = self.get_square_value(border_square)
+                border_value = self.get_square_value(border_square) / distance
 
                 if distance < min_distance or (distance == min_distance and border_value > max_value):
                     min_distance = distance
@@ -146,7 +147,7 @@ class HaliteBotCode:
 
             # add a check here to see if move should be made
 
-            if min_distance > max_dist:
+            if min_distance > self.MAX_DISTANCE:
                 continue
 
             if min_location is not None:
@@ -155,7 +156,6 @@ class HaliteBotCode:
         # iterate through the border sites now to determine if to move
 
         for border_square, locations in border_assoc.items():
-
             # get the sum of the strengths
             total_strength = 0
             for location in locations:
