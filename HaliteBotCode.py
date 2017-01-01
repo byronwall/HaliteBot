@@ -39,16 +39,22 @@ class HaliteBotCode:
 
         return
 
+    def can_move_from(self, source:Square):
+        # must stay at spot to build strength
+        allow_move = True
+
+        if source.strength < source.production * 5:
+            allow_move = False
+
+        return allow_move
+
+
     def is_move_allowed(self, move: Move) -> bool:
 
         allow_move = True
 
         source = move.square
         target = self.game_map.get_target(source, move.direction)
-
-        # must stay at spot to build strength
-        if source.strength < source.production * 5:
-            allow_move = False
 
         # must stay for one turn to avoid constantly moving
         # if self.time_at_square[source] <= 1:
@@ -111,11 +117,13 @@ class HaliteBotCode:
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             # find the closest border spot
-            min_distance = 1000
             min_location = None
             max_value = 0
 
             must_attack = False
+
+            if not self.can_move_from(location):
+                continue
 
             for border_square in border_sites:
 
@@ -129,7 +137,6 @@ class HaliteBotCode:
 
                 # reset the best spot if this is the first to be attackable
                 if distance < self.ATTACK_DIST and can_attack[border_square] and not must_attack:
-                    min_distance = 1000
                     min_location = None
                     max_value = 0
                     must_attack = True
@@ -140,15 +147,11 @@ class HaliteBotCode:
 
                 border_value = self.get_square_value(border_square) / distance
 
-                if distance < min_distance or (distance == min_distance and border_value > max_value):
-                    min_distance = distance
+                if border_value > max_value:
                     min_location = border_square
                     max_value = border_value
 
             # add a check here to see if move should be made
-
-            if min_distance > self.MAX_DISTANCE:
-                continue
 
             if min_location is not None:
                 border_assoc[min_location].append(location)
