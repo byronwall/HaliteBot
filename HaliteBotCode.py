@@ -301,20 +301,26 @@ class Dijkstra:
 
     def get_path_for_future(self, start : Square, target : Square, time_total: int):
         seen = set()
+        avail  = set()
+
+        avail.add(start)
+
         # 'value prod_avail time_to_reach steps'
-        max_heap = [(-start.strength, start, (), start.production, 0)]
+        max_heap = [(-start.strength, start, (), start.production, 0, avail)]
         side_heap = []
 
         last_best = None
 
         while max_heap:
             last_best = heappop(max_heap)
-            (future_value, node_current, path, prod_avail, time_now) = last_best
+            (future_value, node_current, path, prod_avail, time_now, nodes_avail) = last_best
 
             heappush(side_heap, last_best)
 
-            if node_current not in seen:
+            if node_current not in path:
                 seen.add(node_current)
+                nodes_avail.remove(node_current)
+
                 new_path = list(path)
                 new_path.append(node_current)
 
@@ -323,8 +329,12 @@ class Dijkstra:
 
                 nodes_to_test = self.graph.get(node_current, ()) # type: List[Square]
 
-                for node_test in nodes_to_test:
-                    if node_test not in seen:
+                for node in nodes_to_test:
+                    nodes_avail.add(node)
+
+                for node_test in nodes_avail:
+                    # check the nodes not currently on the path
+                    if node_test not in new_path:
                         # determine the time to get there
                         time_addl = node_test.strength // prod_avail
 
@@ -332,9 +342,9 @@ class Dijkstra:
                         if new_time_now <= time_total:
                             new_future = future_value - (node_test.production * (2*time_total - new_time_now) - node_test.strength)
                             new_prod_avail = prod_avail + node_test.production
-                            heappush(max_heap, (new_future , node_test, new_path, new_prod_avail, new_time_now))
+                            heappush(max_heap, (new_future , node_test, new_path, new_prod_avail, new_time_now, nodes_avail))
                         else:
-                            heappush(side_heap, (new_future, node_test, new_path, new_prod_avail, new_time_now))
+                            heappush(side_heap, (new_future, node_test, new_path, new_prod_avail, new_time_now, nodes_avail))
 
         best = heappop(side_heap)
         return (best[0], best[2])

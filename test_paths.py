@@ -23,7 +23,7 @@ dij = Dijkstra(gameMap)
 (future_value, new_path) = dij.get_path_for_future(
     gameMap.contents[5][10],
     Square(-1,-1,0,0,0),
-    160)
+    120)
 
 print(future_value)
 for path in new_path:
