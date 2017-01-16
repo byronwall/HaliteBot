@@ -5,9 +5,15 @@ from typing import Set
 from hlt import *
 import logging
 
+from collections import defaultdict
+from heapq import *
+
+Edge = namedtuple('Edge', 'left right')
+
+Path = namedtuple('Path', 'value prod_avail time_to_reach steps')
 
 class HaliteBotCode:
-    def __init__(self, game_map: GameMap, id: int, options=dict()):
+    def __init__(self, game_map: GameMap, id: int, options=defaultdict(None)):
         self.id = id
         self.game_map = game_map
         self.owned_sites = set()  # type: Set[Square]
@@ -39,7 +45,7 @@ class HaliteBotCode:
 
         return
 
-    def can_move_from(self, source:Square):
+    def can_move_from(self, source: Square):
         # must stay at spot to build strength
         allow_move = True
 
@@ -47,7 +53,6 @@ class HaliteBotCode:
             allow_move = False
 
         return allow_move
-
 
     def is_move_allowed(self, move: Move) -> bool:
 
@@ -70,9 +75,9 @@ class HaliteBotCode:
 
         return allow_move
 
-    def can_attack_square(self, square:Square)->bool:
+    def can_attack_square(self, square: Square) -> bool:
         # this will return a bool indicating if the square can be attacked
-        return any(neighbor.owner not in [0,self.id] for neighbor in self.game_map.neighbors(square))
+        return any(neighbor.owner not in [0, self.id] for neighbor in self.game_map.neighbors(square))
 
     def get_square_value(self, square: Square) -> float:
 
@@ -110,9 +115,9 @@ class HaliteBotCode:
         desired_moves = dict()  # type: Dict[Square, Move]
 
         # update the can attack dict
-        can_attack = dict() # type: Dict[Square, bool]
+        can_attack = dict()  # type: Dict[Square, bool]
         for border_square in border_sites:
-            can_attack[border_square] =  self.can_attack_square(border_square)
+            can_attack[border_square] = self.can_attack_square(border_square)
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
@@ -276,3 +281,60 @@ class HaliteBotCode:
 
         # do something with the border sites
         return border_sites
+
+
+class Dijkstra:
+    graph = defaultdict(list) # type: Dict[Square, List[Square]]
+
+    def __init__(self, game_map: GameMap):
+        # iterate through game map
+        edges = []  # type: List[Edge]
+        for square in game_map:
+            # create edge from down and right
+            for direction in [EAST, SOUTH]:
+                edge = Edge(square, game_map.get_target(square, direction))
+                edges.append(edge)
+
+        for edge in edges:
+            self.graph[edge.left].append(edge.right)
+            self.graph[edge.right].append(edge.left)
+
+    def get_path_for_future(self, start : Square, target : Square, time_total: int):
+        seen = set()
+        # 'value prod_avail time_to_reach steps'
+        max_heap = [(-start.strength, start, (), start.production, 0)]
+        side_heap = []
+
+        last_best = None
+
+        while max_heap:
+            last_best = heappop(max_heap)
+            (future_value, node_current, path, prod_avail, time_now) = last_best
+
+            heappush(side_heap, last_best)
+
+            if node_current not in seen:
+                seen.add(node_current)
+                new_path = list(path)
+                new_path.append(node_current)
+
+                if node_current == target:
+                    return (future_value, new_path)
+
+                nodes_to_test = self.graph.get(node_current, ()) # type: List[Square]
+
+                for node_test in nodes_to_test:
+                    if node_test not in seen:
+                        # determine the time to get there
+                        time_addl = node_test.strength // prod_avail
+
+                        new_time_now = time_now + time_addl
+                        if new_time_now <= time_total:
+                            new_future = future_value - (node_test.production * (2*time_total - new_time_now) - node_test.strength)
+                            new_prod_avail = prod_avail + node_test.production
+                            heappush(max_heap, (new_future , node_test, new_path, new_prod_avail, new_time_now))
+                        else:
+                            heappush(side_heap, (new_future, node_test, new_path, new_prod_avail, new_time_now))
+
+        best = heappop(side_heap)
+        return (best[0], best[2])

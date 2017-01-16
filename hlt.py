@@ -3,6 +3,8 @@ from collections import namedtuple
 from itertools import chain, zip_longest
 from typing import List, Iterable
 
+import logging
+
 
 def grouper(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks"
@@ -36,6 +38,9 @@ Move = namedtuple('Move', 'square direction')
 
 class GameMap:
     def __init__(self, size_string, production_string, map_string=None):
+        logging.debug("size_string:" + size_string)
+        logging.debug("production_string:" + production_string)
+
         self.width, self.height = tuple(map(int, size_string.split()))
         self.production = tuple(tuple(map(int, substring)) for substring in grouper(production_string.split(), self.width))
         self.contents = None
@@ -46,6 +51,8 @@ class GameMap:
         "Updates the map information from the latest frame provided by the Halite game environment."
         if map_string is None:
             map_string = get_string()
+
+        logging.debug("map_string:" + map_string)
         split_string = map_string.split()
         owners = list()
         while len(owners) < self.width * self.height:
@@ -62,7 +69,7 @@ class GameMap:
                                           grouper(map(int, split_string), self.width),
                                           self.production))]
 
-    def __iter__(self):
+    def __iter__(self)-> Iterable[Square]:
         "Allows direct iteration over all squares in the GameMap instance."
         return chain.from_iterable(self.contents)
 

@@ -18,21 +18,22 @@ parser.add_argument('-n','--name', help='Bot name')
 
 args = vars(parser.parse_args())
 
+# decide if logging should happen
+if args["logging"]:
+    if not os.path.isdir("logs"):
+        os.mkdir("logs")
+    LOG_FILENAME = str(int(time.time())) + "-" + '.log'
+    logging.basicConfig(filename="logs/" + LOG_FILENAME, level=logging.DEBUG)
+else:
+    logging.disable(logging.CRITICAL)
+
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID, args)
 
 bot_name = "byronwall-8" if args["name"] is None else args["name"]
 hlt.send_init(bot_name)
 
-# decide if logging should happen
-if args["logging"]:
-    if not os.path.isdir("logs"):
-        os.mkdir("logs")
 
-    LOG_FILENAME = str(int(time.time())) + "-" + str(myID) + '.log'
-    logging.basicConfig(filename="logs/" + LOG_FILENAME, level=logging.DEBUG)
-else:
-    logging.disable(logging.CRITICAL)
 
 # decide if profiling should happen
 SHOULD_PROFILE = args["profile"]
