@@ -318,6 +318,10 @@ class Dijkstra:
             heappush(side_heap, last_best)
 
             if node_current not in path:
+
+                # copy the set to prevent cross talk
+                nodes_avail = set(nodes_avail)
+
                 seen.add(node_current)
                 nodes_avail.remove(node_current)
 
