@@ -12,6 +12,7 @@ Edge = namedtuple('Edge', 'left right')
 
 Path = namedtuple('Path', 'value prod_avail time_to_reach steps')
 
+
 class HaliteBotCode:
     def __init__(self, game_map: GameMap, id: int, options=defaultdict(None)):
         self.id = id
@@ -284,10 +285,12 @@ class HaliteBotCode:
 
 
 class Dijkstra:
-    graph = defaultdict(list) # type: Dict[Square, List[Square]]
+    graph = defaultdict(list)  # type: Dict[Square, List[Square]]
+    game_map = None
 
     def __init__(self, game_map: GameMap):
         # iterate through game map
+        self.game_map = game_map
         edges = []  # type: List[Edge]
         for square in game_map:
             # create edge from down and right
@@ -299,9 +302,127 @@ class Dijkstra:
             self.graph[edge.left].append(edge.right)
             self.graph[edge.right].append(edge.left)
 
-    def get_path_for_future(self, start : Square, target : Square, time_total: int):
+    def do_genetic_search(self, start: Square, time_total: int):
+        # create an index for the squares, number -> Square
+        squares = []  # type: List[Square]
+
+        for square in self.game_map:
+            if square == start:
+                continue
+            squares.append(square)
+
+        nodes_start = set()
+        for node in self.graph.get(start):
+            nodes_start.add(node)
+
+        population = []
+
+        for pop_index in range(0, 100):
+            search_order = self.get_random(squares)
+            future_value, path = self.eval_path(nodes_start, search_order, start, time_total)
+
+            # done with process, add to best list
+            heappush(population, (future_value, path))
+
+        # now have the best populations from that run
+
+        self.print_pop(nsmallest(10, population))
+
+        # take the population and do the crossovers
+        for generation in range(200):
+            population = nsmallest(40, population)
+            heapify(population)
+
+            for new_random in range(0):
+                search_order = self.get_random(squares)
+                future_value, path = self.eval_path(nodes_start, search_order, start, time_total)
+                heappush(population, (future_value, path))
+
+            for cross_index in range(20):
+                # pick the first one
+                value1, path1 = random.choice(population)
+                value2, path2 = random.choice(population)
+                # pick the second one
+
+                split1 = random.randrange(0, len(path1))
+                split2 = random.randrange(0, len(path2))
+
+                new_path1 = path2[0:split2] + path1[split1:] + self.get_random(squares)
+                new_path2 = path1[0:split1] + path2[split2:] + self.get_random(squares)
+
+                future_value1, new_path1 = self.eval_path(nodes_start, new_path1, start, time_total)
+                future_value2, new_path2 = self.eval_path(nodes_start, new_path2, start, time_total)
+
+                if future_value1 < min(value1, value2):
+                    heappush(population, (future_value1, new_path1))
+
+                if future_value2 < min(value1, value2):
+                    heappush(population, (future_value2, new_path2))
+
+            self.print_pop(nsmallest(5, population))
+
+        # create the population to search
+        # create 100 items in a list that are each a list of all teh index numbers
+
+        # write the code to search a path, same as below but done all at once
+
+        # store the results in a heap
+
+        # once done, do the crossover to find better paths
+
+
+        # do that for 100 iterations or so
+
+        return
+
+    def get_random(self, squares):
+        search_order = list(squares)
+        random.shuffle(search_order)
+        return search_order
+
+    def print_pop(self, population):
+        text = ""
+        for value, path in population:
+            text += str(value)
+            for item in path:
+                text += str(item)
+            text += "\n"
+
+        print(text)
+
+    def eval_path(self, nodes_start, search_order, start, time_total):
+        path = []
+        path.append(start)
+        nodes_avail = set(nodes_start)
+        future_value = start.strength
+        time_now = 0
+        prod_avail = start.production
+        while (search_order):
+            node_test = search_order.pop(0)
+            if node_test in path:
+                continue
+
+            if node_test in nodes_avail:
+                time_addl = node_test.strength // prod_avail
+                time_now += time_addl
+                if time_now <= time_total:
+                    future_value += node_test.production * (2 * time_total - time_now) - node_test.strength
+                    prod_avail += node_test.production
+                    # add the new nodes to test
+                    for node in self.graph.get(node_test):
+                        nodes_avail.add(node)
+                    path.append(node_test)
+                else:
+                    break
+            else:
+                search_order.append(node_test)
+
+        # stick the search on the tail of the list
+        return -future_value, path
+
+    def get_path_for_future(self, start: Square, target: Square, time_total: int):
         seen = set()
-        avail  = set()
+        avail = set()
 
         avail.add(start)
 
@@ -331,7 +452,7 @@ class Dijkstra:
                 if node_current == target:
                     return (future_value, new_path)
 
-                nodes_to_test = self.graph.get(node_current, ()) # type: List[Square]
+                nodes_to_test = self.graph.get(node_current, ())  # type: List[Square]
 
                 for node in nodes_to_test:
                     nodes_avail.add(node)
@@ -344,11 +465,13 @@ class Dijkstra:
 
                         new_time_now = time_now + time_addl
                         if new_time_now <= time_total:
-                            new_future = future_value - (node_test.production * (2*time_total - new_time_now) - node_test.strength)
+                            new_future = future_value - (
+                                node_test.production * (2 * time_total - new_time_now) - node_test.strength)
                             new_prod_avail = prod_avail + node_test.production
-                            heappush(max_heap, (new_future , node_test, new_path, new_prod_avail, new_time_now, nodes_avail))
+                            heappush(max_heap,
+                                     (new_future, node_test, new_path, new_prod_avail, new_time_now, nodes_avail))
                         else:
-                            heappush(side_heap, (new_future, node_test, new_path, new_prod_avail, new_time_now, nodes_avail))
+                            heappush(side_heap, last_best)
 
         best = heappop(side_heap)
         return (best[0], best[2])

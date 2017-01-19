@@ -5,6 +5,9 @@ import time
 import cProfile
 import argparse
 from HaliteBotCode import *
+import time
+
+start_time = time.time()
 
 size_string = "10 10"
 prod_string = "2 2 3 7 5 3 3 2 2 2 3 3 3 4 4 6 7 4 3 2 3 2 2 4 5 6 6 5 3 2 2 2 2 3 4 4 4 4 2 2 2 2 1 1 2 4 7 4 2 2 2 2 2 3 3 5 7 3 2 2 2 3 4 7 6 4 4 3 3 3 2 3 5 6 6 5 4 2 2 3 2 2 4 4 4 4 3 2 2 2 2 2 4 7 4 2 1 1 2 2"
@@ -19,12 +22,20 @@ gameMap = GameMap(size_string, prod_string, map_string)
 
 dij = Dijkstra(gameMap)
 
+dij.do_genetic_search(gameMap.contents[5][10], 150)
+
+print(time.time() - start_time)
+
+exit()
+
 # this is attempting to find the best path after some frame
 (future_value, new_path) = dij.get_path_for_future(
     gameMap.contents[5][10],
-    Square(-1,-1,0,0,0),
-    120)
+    Square(-1, -1, 0, 0, 0),
+    200)
 
 print(future_value)
 for path in new_path:
     print(path)
+
+print(time.time() - start_time)
