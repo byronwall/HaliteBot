@@ -30,10 +30,10 @@ else:
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID, args)
 
-bot_name = "byronwall-8" if args["name"] is None else args["name"]
+haliteBot.initialize_strategy()
+
+bot_name = "byronwall-ga1" if args["name"] is None else args["name"]
 hlt.send_init(bot_name)
-
-
 
 # decide if profiling should happen
 SHOULD_PROFILE = args["profile"]

@@ -2,6 +2,9 @@ import random
 from typing import Dict
 from typing import List
 from typing import Set
+
+import time
+
 from hlt import *
 import logging
 
@@ -23,6 +26,8 @@ class HaliteBotCode:
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
 
+        self.best_path = []
+
         self.DISTANCE_THRESHOLD = 3 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 9 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
@@ -30,17 +35,38 @@ class HaliteBotCode:
         for square in self.game_map:
             self.time_at_square[square] = 0
 
+    def initialize_strategy(self):
+        # this will generate the ideal path
+
+        self.update_owned_sites()
+
+        start = self.owned_sites[0]
+
+        dij = Dijkstra(self.game_map)
+        value, path = dij.do_genetic_search(start, 100)
+
+        logging.debug("best path: " + str(value) + ", " +  "".join(map(str, path)))
+
+        self.best_path = path
+
+        return
+
     def update(self, game_map: GameMap):
         self.game_map = game_map
 
         logging.debug("reset the moves")
         self.moves_this_frame = []
 
+        if len(self.best_path):
+            logging.debug("should be targeting" + str(self.best_path[0]))
+        else:
+            logging.debug("done with best path target")
+
         logging.debug("update owned sites")
         self.update_owned_sites()
 
         logging.debug("update the moves")
-        self.update_move_targets()
+        self.update_move_targets2()
 
         self.frame += 1
 
@@ -103,15 +129,12 @@ class HaliteBotCode:
     def get_square_metric(self, square: Square):
         return square.production / (square.strength + 1)
 
-    def update_move_targets(self):
+    def update_move_targets2(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
         border_sites = self.get_unowned_border()
 
         # create a dict to assoc border sites
-        border_assoc = dict()  # type: Dict[Square, List[Square]]
-
-        for border_square in border_sites:
-            border_assoc[border_square] = []
+        border_assoc = defaultdict(list)  # type: Dict[Square, List[Square]]
 
         desired_moves = dict()  # type: Dict[Square, Move]
 
@@ -132,6 +155,9 @@ class HaliteBotCode:
                 continue
 
             for border_square in border_sites:
+                if len(self.best_path):
+                    if not must_attack and not border_square in self.best_path[0:5]:
+                        continue
 
                 if must_attack and not can_attack[border_square]:
                     continue
@@ -238,7 +264,9 @@ class HaliteBotCode:
             test_directions = (east_west, north_south)
 
         for direction in test_directions:
-            if direction != STILL:
+            move_target = self.game_map.get_target(start, direction)
+
+            if direction != STILL and (move_target == target or move_target.owner == self.id):
                 return Move(start, direction)
 
         return None
@@ -250,6 +278,10 @@ class HaliteBotCode:
         # this will update the list of sites that are owned by self (will contain locations)
         for square in self.game_map:
             if square.owner == self.id:
+                if square in self.best_path:
+                    self.best_path.remove(square)
+                    logging.debug("removed a site that was owned")
+
                 self.owned_sites.append(square)
                 self.time_at_square[square] += 1
                 self.expected_strength[square] = square.strength
@@ -286,7 +318,8 @@ class HaliteBotCode:
 
 class Dijkstra:
     graph = defaultdict(list)  # type: Dict[Square, List[Square]]
-    game_map = None
+    game_map = None  # type: GameMap
+    squares = []  # type: List[Square]
 
     def __init__(self, game_map: GameMap):
         # iterate through game map
@@ -304,12 +337,23 @@ class Dijkstra:
 
     def do_genetic_search(self, start: Square, time_total: int):
         # create an index for the squares, number -> Square
-        squares = []  # type: List[Square]
+        self.squares = []
+
+        start_time = time.time()
+
+        INITIAL_POPULATION = 200
+        GENERATION_COUNT = 200
+        POPULATION_TO_KEEP = 60
+        MAX_PATH_LENGTH = 5000
+        RANDOM_TO_ADD = 5
+        CROSS_TO_ADD = 20
+
+        logging.debug("start GA:" + str(time.time() - start_time))
 
         for square in self.game_map:
             if square == start:
                 continue
-            squares.append(square)
+            self.squares.append(square)
 
         nodes_start = set()
         for node in self.graph.get(start):
@@ -317,28 +361,39 @@ class Dijkstra:
 
         population = []
 
-        for pop_index in range(0, 100):
-            search_order = self.get_random(squares)
-            future_value, path = self.eval_path(nodes_start, search_order, start, time_total)
+        logging.debug("make rando:" + str(time.time() - start_time))
 
-            # done with process, add to best list
+        for pop_index in range(INITIAL_POPULATION):
+            search_order = self.get_random()
+            future_value, path = self.eval_path(nodes_start, search_order, start, time_total)
             heappush(population, (future_value, path))
 
         # now have the best populations from that run
-
-        self.print_pop(nsmallest(10, population))
-
         # take the population and do the crossovers
-        for generation in range(200):
-            population = nsmallest(40, population)
+
+        logging.debug("start gens:" + str(time.time() - start_time))
+
+        for generation in range(GENERATION_COUNT):
+            logging.debug("next gne:" + str(time.time()-start_time))
+            if (time.time() - start_time) > 10:
+                break
+
+            population = nsmallest(POPULATION_TO_KEEP, population)
             heapify(population)
 
-            for new_random in range(0):
-                search_order = self.get_random(squares)
+            if len(population[0][1]) > MAX_PATH_LENGTH:
+                break
+
+            for new_random in range(RANDOM_TO_ADD):
+                if (time.time() - start_time) > 10:
+                    break
+                search_order = self.get_random()
                 future_value, path = self.eval_path(nodes_start, search_order, start, time_total)
                 heappush(population, (future_value, path))
 
-            for cross_index in range(20):
+            for cross_index in range(CROSS_TO_ADD):
+                if (time.time() - start_time) > 10:
+                    break
                 # pick the first one
                 value1, path1 = random.choice(population)
                 value2, path2 = random.choice(population)
@@ -347,8 +402,8 @@ class Dijkstra:
                 split1 = random.randrange(0, len(path1))
                 split2 = random.randrange(0, len(path2))
 
-                new_path1 = path2[0:split2] + path1[split1:] + self.get_random(squares)
-                new_path2 = path1[0:split1] + path2[split2:] + self.get_random(squares)
+                new_path1 = path2[0:split2] + path1[split1:]
+                new_path2 = path1[0:split1] + path2[split2:]
 
                 future_value1, new_path1 = self.eval_path(nodes_start, new_path1, start, time_total)
                 future_value2, new_path2 = self.eval_path(nodes_start, new_path2, start, time_total)
@@ -359,24 +414,10 @@ class Dijkstra:
                 if future_value2 < min(value1, value2):
                     heappush(population, (future_value2, new_path2))
 
-            self.print_pop(nsmallest(5, population))
+        return population[0]
 
-        # create the population to search
-        # create 100 items in a list that are each a list of all teh index numbers
-
-        # write the code to search a path, same as below but done all at once
-
-        # store the results in a heap
-
-        # once done, do the crossover to find better paths
-
-
-        # do that for 100 iterations or so
-
-        return
-
-    def get_random(self, squares):
-        search_order = list(squares)
+    def get_random(self):
+        search_order = list(self.squares)
         random.shuffle(search_order)
         return search_order
 
@@ -397,7 +438,7 @@ class Dijkstra:
         future_value = start.strength
         time_now = 0
         prod_avail = start.production
-        while (search_order):
+        while search_order:
             node_test = search_order.pop(0)
             if node_test in path:
                 continue
@@ -406,7 +447,7 @@ class Dijkstra:
                 time_addl = node_test.strength // prod_avail
                 time_now += time_addl
                 if time_now <= time_total:
-                    future_value += node_test.production * (2 * time_total - time_now) - node_test.strength
+                    future_value += node_test.production * (1.5 * time_total - time_now) - node_test.strength
                     prod_avail += node_test.production
                     # add the new nodes to test
                     for node in self.graph.get(node_test):
@@ -414,8 +455,6 @@ class Dijkstra:
                     path.append(node_test)
                 else:
                     break
-            else:
-                search_order.append(node_test)
 
         # stick the search on the tail of the list
         return -future_value, path

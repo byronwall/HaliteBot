@@ -21,8 +21,10 @@ myID = 1
 gameMap = GameMap(size_string, prod_string, map_string)
 
 dij = Dijkstra(gameMap)
+value,path = dij.do_genetic_search(gameMap.contents[5][10], 150)
 
-dij.do_genetic_search(gameMap.contents[5][10], 150)
+print(value)
+print("".join(map(str, path)))
 
 print(time.time() - start_time)
 
