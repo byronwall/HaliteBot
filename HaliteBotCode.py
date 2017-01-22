@@ -46,10 +46,12 @@ class HaliteBotCode:
 
         start = self.owned_sites[0]
 
-        dij = Dijkstra(self.game_map)
-        value, path = dij.do_genetic_search(start, 100)
+        search_steps = self.game_map.height * self.game_map.width / 5
 
-        logging.debug("best path: " + str(value) + ", " +  "".join(map(str, path)))
+        dij = Dijkstra(self.game_map)
+        value, path = dij.do_genetic_search(start, search_steps)
+
+        logging.debug("best path: %d %d %d %s", search_steps, value, len(path), "".join(map(str, path)))
 
         self.best_path = path
 
@@ -159,13 +161,12 @@ class HaliteBotCode:
 
             dij = Dijkstra(self.game_map, self.id, exclude)
 
-
             # this will check for moves and break if none are found
             if len(self.best_path) == 0:
                 logging.debug("no more targets")
                 break
 
-            target = self.best_path[0] # type:Square
+            target = self.best_path[0]  # type:Square
             target = self.game_map.get_square(target.x, target.y)
 
             logging.debug("going for the target %s", target)
@@ -173,13 +174,13 @@ class HaliteBotCode:
             # get the moves
             value, path = dij.get_path_with_strength(target, 5)
 
-            path = path # type: List[NodeAvail]
+            path = path  # type: List[NodeAvail]
 
             if path is None:
                 logging.debug("no path")
                 break
             else:
-                logging.debug("got the path %s", "".join(map(str,path)))
+                logging.debug("got the path %s", "".join(map(str, path)))
 
             max_dist = 0
             for node in path:
@@ -397,9 +398,9 @@ class HaliteBotCode:
 class Dijkstra:
     squares = []  # type: List[Square]
 
-    def __init__(self, game_map: GameMap, owner_required = 0, exclude = []):
+    def __init__(self, game_map: GameMap, owner_required=0, exclude=[]):
         # iterate through game map
-        self.game_map = game_map # type: GameMap
+        self.game_map = game_map  # type: GameMap
         self.id = owner_required
         self.graph = defaultdict(list)  # type: Dict[Square, List[Square]]
 
@@ -423,7 +424,6 @@ class Dijkstra:
 
             if edge.left not in exclude:
                 self.graph[edge.right].append(edge.left)
-
 
     def do_genetic_search(self, start: Square, time_total: int):
         # create an index for the squares, number -> Square
@@ -464,7 +464,7 @@ class Dijkstra:
         logging.debug("start gens:" + str(time.time() - start_time))
 
         for generation in range(GENERATION_COUNT):
-            logging.debug("next gne:" + str(time.time()-start_time))
+            logging.debug("next gne:{0}, {1}".format(str(time.time() - start_time), population[0][0]))
             if (time.time() - start_time) > 10:
                 break
 
@@ -475,15 +475,11 @@ class Dijkstra:
                 break
 
             for new_random in range(RANDOM_TO_ADD):
-                if (time.time() - start_time) > 10:
-                    break
                 search_order = self.get_random()
                 future_value, path = self.eval_path(nodes_start, search_order, start, time_total)
                 heappush(population, (future_value, path))
 
             for cross_index in range(CROSS_TO_ADD):
-                if (time.time() - start_time) > 10:
-                    break
                 # pick the first one
                 value1, path1 = random.choice(population)
                 value2, path2 = random.choice(population)
@@ -492,8 +488,8 @@ class Dijkstra:
                 split1 = random.randrange(0, len(path1))
                 split2 = random.randrange(0, len(path2))
 
-                new_path1 = path2[0:split2] + path1[split1:]
-                new_path2 = path1[0:split1] + path2[split2:]
+                new_path1 = path2[0:split2] + path1[split1:] + self.get_random()
+                new_path2 = path1[0:split1] + path2[split2:] + self.get_random()
 
                 future_value1, new_path1 = self.eval_path(nodes_start, new_path1, start, time_total)
                 future_value2, new_path2 = self.eval_path(nodes_start, new_path2, start, time_total)
@@ -503,6 +499,22 @@ class Dijkstra:
 
                 if future_value2 < min(value1, value2):
                     heappush(population, (future_value2, new_path2))
+
+            for criss_cross_index in range(10):
+                value1, path1 = random.choice(population)
+
+                new_path1 = list(path1)
+
+                for path_index in range(len(new_path1)-1):
+                    if random.random() > 0.75:
+                        new_path1[path_index], new_path1[path_index+1] = new_path1[path_index+1], new_path1[path_index]
+
+                future_value1, new_path1 = self.eval_path(nodes_start, new_path1, start, time_total)
+
+                if future_value1 < value1:
+                    #logging.debug("criss cross before %d after %d", value1, future_value1)
+                    heappush(population, (future_value1, new_path1))
+
 
         return population[0]
 
@@ -528,7 +540,10 @@ class Dijkstra:
         future_value = start.strength
         time_now = 0
         prod_avail = start.production
-        while search_order:
+        iteration = 0
+        init_count = len(search_order)
+        while search_order and iteration < init_count * 2:
+            iteration += 1
             node_test = search_order.pop(0)
             if node_test in path:
                 continue
@@ -537,7 +552,7 @@ class Dijkstra:
                 time_addl = node_test.strength // prod_avail
                 time_now += time_addl
                 if time_now <= time_total:
-                    future_value += node_test.production * (1.5 * time_total - time_now) - node_test.strength
+                    future_value += node_test.production * (3 * time_total - time_now) - node_test.strength
                     prod_avail += node_test.production
                     # add the new nodes to test
                     for node in self.graph.get(node_test):
@@ -545,11 +560,13 @@ class Dijkstra:
                     path.append(node_test)
                 else:
                     break
+            else:
+                search_order.append(node_test)
 
         # stick the search on the tail of the list
         return -future_value, path
 
-    def get_path_with_strength(self, start: Square, size_max:int, strength_goal = 0):
+    def get_path_with_strength(self, start: Square, size_max: int, strength_goal=0):
 
         if strength_goal == 0:
             strength_goal = start.strength
@@ -562,19 +579,19 @@ class Dijkstra:
 
         while max_heap:
             last_best = heappop(max_heap)
-            (strength_total, node_current, path, nodes_avail, path_infos ) = last_best
-            node_current = node_current # type: NodeAvail
+            (strength_total, node_current, path, nodes_avail, path_infos) = last_best
+            node_current = node_current  # type: NodeAvail
             if node_current.node not in path:
                 # copy the set to prevent cross talk
-                nodes_avail = set(nodes_avail) # type: Set[NodeAvail]
+                nodes_avail = set(nodes_avail)  # type: Set[NodeAvail]
                 if len(nodes_avail):
                     nodes_avail.remove(node_current)
 
-                new_path = list(path) # type: List[Square]
+                new_path = list(path)  # type: List[Square]
                 new_path.append(node_current.node)
 
-                if strength_total > strength_goal:
-                    heappush(side_heap, (strength_total, path_infos))
+                if -strength_total > strength_goal:
+                    heappush(side_heap, (len(new_path), path_infos))
                     continue
 
                 nodes_to_test = self.graph.get(node_current.node, ())  # type: List[Square]
@@ -589,12 +606,12 @@ class Dijkstra:
                     if node_test.node not in new_path:
                         # determine the time to get there
                         if len(new_path) <= size_max:
-
                             new_infos = list(path_infos)
                             new_infos.append(node_test)
 
                             heappush(max_heap, (
-                                (strength_total + node_test.node.strength), node_test, new_path, nodes_avail, new_infos))
+                                (strength_total - node_test.node.strength), node_test, new_path, nodes_avail,
+                                new_infos))
 
         if side_heap:
             best = heappop(side_heap)
@@ -602,7 +619,6 @@ class Dijkstra:
             best = (0, None)
 
         return best
-
 
     def get_path_for_future(self, start: Square, target: Square, time_total: int):
         seen = set()
@@ -659,6 +675,3 @@ class Dijkstra:
 
         best = heappop(side_heap)
         return (best[0], best[2])
-
-
-
