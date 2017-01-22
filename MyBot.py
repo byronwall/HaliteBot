@@ -15,6 +15,7 @@ parser.add_argument('-D','--DISTANCE_THRESHOLD', help='Max distance to count as 
 parser.add_argument('-M','--MAX_DISTANCE', help='Max distance to allow move', type=int)
 parser.add_argument('-A','--ATTACK_DIST', help='Distance to force attack if available', type=int)
 parser.add_argument('-n','--name', help='Bot name')
+parser.add_argument('-ga','--GENETIC', help='Do the GA search', action="store_true")
 
 args = vars(parser.parse_args())
 
@@ -30,7 +31,8 @@ else:
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID, args)
 
-haliteBot.initialize_strategy()
+if args["GENETIC"]:
+    haliteBot.initialize_strategy()
 
 bot_name = "byronwall-ga1" if args["name"] is None else args["name"]
 hlt.send_init(bot_name)
@@ -41,11 +43,13 @@ if SHOULD_PROFILE:
     if not os.path.isdir("profiles"):
         os.mkdir("profiles")
 
-frame = 1
+frame = 0
 
 while True:
 
     gameMap.get_frame()
+
+    logging.debug("FRAME START %d", frame)
 
     should_profile = (myID == 1) and (frame % 50 == 0) and SHOULD_PROFILE
     if should_profile:

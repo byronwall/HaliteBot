@@ -15,6 +15,8 @@ Edge = namedtuple('Edge', 'left right')
 
 Path = namedtuple('Path', 'value prod_avail time_to_reach steps')
 
+NodeAvail = namedtuple("NodeAvail", "node previous prev_dist")
+
 
 class HaliteBotCode:
     def __init__(self, game_map: GameMap, id: int, options=defaultdict(None)):
@@ -25,6 +27,8 @@ class HaliteBotCode:
         self.time_at_square = dict()  # type: Dict[Square, int]
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
+
+        self.future_moves = defaultdict(list)
 
         self.best_path = []
 
@@ -65,8 +69,11 @@ class HaliteBotCode:
         logging.debug("update owned sites")
         self.update_owned_sites()
 
-        logging.debug("update the moves")
-        self.update_move_targets2()
+        logging.debug("runnign check for path on best path")
+        self.update_moves_with_best_target()
+
+        # logging.debug("update the moves")
+        # self.update_move_targets2()
 
         self.frame += 1
 
@@ -128,6 +135,77 @@ class HaliteBotCode:
 
     def get_square_metric(self, square: Square):
         return square.production / (square.strength + 1)
+
+    def update_moves_with_best_target(self):
+        # this will iterate through the targets, and find a path to get to them
+
+        # make the graph
+        logging.debug("make the graph for the best check")
+
+        # make list of exclusions
+        while True:
+            exclude = []
+            frames_to_del = []
+            for frame, moves in self.future_moves.items():
+                if frame >= self.frame:
+                    for move in moves:
+                        exclude.append(move.square)
+                else:
+                    frames_to_del.append(frame)
+
+            # remove old moves
+            for frame in frames_to_del:
+                self.future_moves.pop(frame)
+
+            dij = Dijkstra(self.game_map, self.id, exclude)
+
+
+            # this will check for moves and break if none are found
+            if len(self.best_path) == 0:
+                logging.debug("no more targets")
+                break
+
+            target = self.best_path[0] # type:Square
+            target = self.game_map.get_square(target.x, target.y)
+
+            logging.debug("going for the target %s", target)
+
+            # get the moves
+            value, path = dij.get_path_with_strength(target, 5)
+
+            path = path # type: List[NodeAvail]
+
+            if path is None:
+                logging.debug("no path")
+                break
+            else:
+                logging.debug("got the path %s", "".join(map(str,path)))
+
+            max_dist = 0
+            for node in path:
+                # get the max distance
+                logging.debug("node: %s, prev:%s, dist:%d", node.node, node.previous, node.prev_dist)
+                if node.prev_dist > max_dist:
+                    max_dist = node.prev_dist
+
+            # add the moves in the future
+            for node in path:
+                for direc in [NORTH, SOUTH, EAST, WEST]:
+                    if self.game_map.get_target(node.node, direc) == node.previous:
+                        time_to_move = max_dist - node.prev_dist
+                        self.future_moves[self.frame + time_to_move].append(Move(node.node, direc))
+                        break
+
+            logging.debug("future moves: %s", self.future_moves)
+            logging.debug("max_dist %d", max_dist)
+
+            self.best_path.pop(0)
+
+        # add the moves in
+
+        self.moves_this_frame = self.future_moves[self.frame]
+
+        return
 
     def update_move_targets2(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
@@ -317,23 +395,35 @@ class HaliteBotCode:
 
 
 class Dijkstra:
-    graph = defaultdict(list)  # type: Dict[Square, List[Square]]
-    game_map = None  # type: GameMap
     squares = []  # type: List[Square]
 
-    def __init__(self, game_map: GameMap):
+    def __init__(self, game_map: GameMap, owner_required = 0, exclude = []):
         # iterate through game map
-        self.game_map = game_map
+        self.game_map = game_map # type: GameMap
+        self.id = owner_required
+        self.graph = defaultdict(list)  # type: Dict[Square, List[Square]]
+
         edges = []  # type: List[Edge]
         for square in game_map:
             # create edge from down and right
-            for direction in [EAST, SOUTH]:
+            if owner_required > 0 and square.owner != owner_required:
+                # only want squares with a certain owner
+                continue
+
+            if square in exclude:
+                continue
+
+            for direction in [EAST, WEST, NORTH, SOUTH]:
                 edge = Edge(square, game_map.get_target(square, direction))
                 edges.append(edge)
 
         for edge in edges:
-            self.graph[edge.left].append(edge.right)
-            self.graph[edge.right].append(edge.left)
+            if edge.right not in exclude:
+                self.graph[edge.left].append(edge.right)
+
+            if edge.left not in exclude:
+                self.graph[edge.right].append(edge.left)
+
 
     def do_genetic_search(self, start: Square, time_total: int):
         # create an index for the squares, number -> Square
@@ -459,6 +549,61 @@ class Dijkstra:
         # stick the search on the tail of the list
         return -future_value, path
 
+    def get_path_with_strength(self, start: Square, size_max:int, strength_goal = 0):
+
+        if strength_goal == 0:
+            strength_goal = start.strength
+
+        # 'value prod_avail time_to_reach steps'
+        max_heap = [(0, NodeAvail(start, None, 0), [], set(), [])]
+        side_heap = []
+
+        is_first = True
+
+        while max_heap:
+            last_best = heappop(max_heap)
+            (strength_total, node_current, path, nodes_avail, path_infos ) = last_best
+            node_current = node_current # type: NodeAvail
+            if node_current.node not in path:
+                # copy the set to prevent cross talk
+                nodes_avail = set(nodes_avail) # type: Set[NodeAvail]
+                if len(nodes_avail):
+                    nodes_avail.remove(node_current)
+
+                new_path = list(path) # type: List[Square]
+                new_path.append(node_current.node)
+
+                if strength_total > strength_goal:
+                    heappush(side_heap, (strength_total, path_infos))
+                    continue
+
+                nodes_to_test = self.graph.get(node_current.node, ())  # type: List[Square]
+
+                for node in nodes_to_test:
+                    # only test those nodes we own
+                    if node.owner == self.id:
+                        nodes_avail.add(NodeAvail(node, node_current.node, node_current.prev_dist + 1))
+
+                for node_test in nodes_avail:
+                    # check the nodes not currently on the path
+                    if node_test.node not in new_path:
+                        # determine the time to get there
+                        if len(new_path) <= size_max:
+
+                            new_infos = list(path_infos)
+                            new_infos.append(node_test)
+
+                            heappush(max_heap, (
+                                (strength_total + node_test.node.strength), node_test, new_path, nodes_avail, new_infos))
+
+        if side_heap:
+            best = heappop(side_heap)
+        else:
+            best = (0, None)
+
+        return best
+
+
     def get_path_for_future(self, start: Square, target: Square, time_total: int):
         seen = set()
         avail = set()
@@ -514,3 +659,6 @@ class Dijkstra:
 
         best = heappop(side_heap)
         return (best[0], best[2])
+
+
+

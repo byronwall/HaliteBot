@@ -26,11 +26,10 @@ _square = namedtuple('Square', 'x y owner strength production')
 class Square(_square):
     def __hash__(self):
         return hash((self.x, self.y))
-
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
     def __str__(self):
-        return "(%d,%d)" % (self.x, self.y)
+        return "(%d,%d #%d)" % (self.x, self.y, self.strength)
 
 
 Move = namedtuple('Move', 'square direction')
@@ -93,6 +92,9 @@ class GameMap:
         dx = min(abs(sq1.x - sq2.x), sq1.x + self.width - sq2.x, sq2.x + self.width - sq1.x)
         dy = min(abs(sq1.y - sq2.y), sq1.y + self.height - sq2.y, sq2.y + self.height - sq1.y)
         return dx + dy
+
+    def get_square(self, x:int, y:int)-> Square:
+        return self.contents[y][x]
 
 #################################################################
 # Functions for communicating with the Halite game environment  #
