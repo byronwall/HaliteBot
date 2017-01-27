@@ -31,6 +31,7 @@ class HaliteBotCode:
         self.future_moves = defaultdict(list)
 
         self.best_path = []
+        self.start_time = time.time()
 
         self.DISTANCE_THRESHOLD = 3 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 9 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
@@ -60,6 +61,8 @@ class HaliteBotCode:
     def update(self, game_map: GameMap):
         self.game_map = game_map
 
+        self.start_time = time.time()
+
         logging.debug("reset the moves")
         self.moves_this_frame = []
 
@@ -70,6 +73,9 @@ class HaliteBotCode:
 
         logging.debug("update owned sites")
         self.update_owned_sites()
+
+        logging.debug("updating target sites on border")
+        self.update_best_moves_from_border()
 
         logging.debug("runnign check for path on best path")
         self.update_moves_with_best_target()
@@ -138,6 +144,10 @@ class HaliteBotCode:
     def get_square_metric(self, square: Square):
         return square.production / (square.strength + 1)
 
+    def is_time_close(self) -> bool:
+        return time.time()-self.start_time > 0.2
+
+
     def update_moves_with_best_target(self):
         # this will iterate through the targets, and find a path to get to them
 
@@ -145,7 +155,8 @@ class HaliteBotCode:
         logging.debug("make the graph for the best check")
 
         # make list of exclusions
-        while True:
+        while len(self.best_path) and not self.is_time_close():
+            logging .debug("size of best path %d", len(self.best_path))
             exclude = []
             frames_to_del = []
             for frame, moves in self.future_moves.items():
@@ -159,17 +170,14 @@ class HaliteBotCode:
             for frame in frames_to_del:
                 self.future_moves.pop(frame)
 
+            logging.debug("size of excluded squares %d", len(exclude))
+
             dij = Dijkstra(self.game_map, self.id, exclude)
 
-            # this will check for moves and break if none are found
-            if len(self.best_path) == 0:
-                logging.debug("no more targets")
-                break
-
-            target = self.best_path[0]  # type:Square
+            value, target = self.best_path[0]  # type:Square
             target = self.game_map.get_square(target.x, target.y)
 
-            logging.debug("going for the target %s", target)
+            logging.debug("going for the target %s with value %f", target, value)
 
             # get the moves
             value, path = dij.get_path_with_strength(target, 5)
@@ -178,35 +186,47 @@ class HaliteBotCode:
 
             if path is None:
                 logging.debug("no path")
-                break
             else:
                 logging.debug("got the path %s", "".join(map(str, path)))
 
-            max_dist = 0
-            for node in path:
-                # get the max distance
-                logging.debug("node: %s, prev:%s, dist:%d", node.node, node.previous, node.prev_dist)
-                if node.prev_dist > max_dist:
-                    max_dist = node.prev_dist
+                max_dist = 0
+                for node in path:
+                    # get the max distance
+                    logging.debug("node: %s, prev:%s, dist:%d", node.node, node.previous, node.prev_dist)
+                    if node.prev_dist > max_dist:
+                        max_dist = node.prev_dist
 
-            # add the moves in the future
-            for node in path:
-                for direc in [NORTH, SOUTH, EAST, WEST]:
-                    if self.game_map.get_target(node.node, direc) == node.previous:
-                        time_to_move = max_dist - node.prev_dist
-                        self.future_moves[self.frame + time_to_move].append(Move(node.node, direc))
-                        break
+                # add the moves in the future
+                for node in path:
+                    for direc in [NORTH, SOUTH, EAST, WEST]:
+                        if self.game_map.get_target(node.node, direc) == node.previous:
+                            time_to_move = max_dist - node.prev_dist
+                            self.future_moves[self.frame + time_to_move].append(Move(node.node, direc))
+                            break
 
-            logging.debug("future moves: %s", self.future_moves)
-            logging.debug("max_dist %d", max_dist)
+                logging.debug("future moves: %s", self.future_moves)
+                logging.debug("max_dist %d", max_dist)
 
-            self.best_path.pop(0)
+            heappop(self.best_path)
 
         # add the moves in
 
         self.moves_this_frame = self.future_moves[self.frame]
 
         return
+
+    def update_best_moves_from_border(self):
+
+        border_sites = self.get_unowned_border()
+
+        self.best_path = []
+
+        for border_square in border_sites:
+            border_value = self.get_square_value(border_square)
+            heappush(self.best_path, (-border_value, border_square))
+
+        return
+
 
     def update_move_targets2(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
@@ -357,10 +377,6 @@ class HaliteBotCode:
         # this will update the list of sites that are owned by self (will contain locations)
         for square in self.game_map:
             if square.owner == self.id:
-                if square in self.best_path:
-                    self.best_path.remove(square)
-                    logging.debug("removed a site that was owned")
-
                 self.owned_sites.append(square)
                 self.time_at_square[square] += 1
                 self.expected_strength[square] = square.strength
@@ -569,7 +585,7 @@ class Dijkstra:
     def get_path_with_strength(self, start: Square, size_max: int, strength_goal=0):
 
         if strength_goal == 0:
-            strength_goal = start.strength
+            strength_goal = 10 if start.strength == 0 else start.strength
 
         # 'value prod_avail time_to_reach steps'
         max_heap = [(0, NodeAvail(start, None, 0), [], set(), [])]

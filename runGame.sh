@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BOT_1="python3 MyBot.py --logging -n bw-ga1 -ga"
+BOT_1="python3 MyBot.py --logging -n bw-best-border"
 BOT_2="python3 'bots/2016 12 30, attempt to force attacks/MyBot.py'"
 
 SIZE=30
