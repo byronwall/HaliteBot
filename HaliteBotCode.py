@@ -34,6 +34,8 @@ class HaliteBotCode:
         self.start_time = time.time()
         self.use_best_path = True
 
+        self.dij = None # type: Dijkstra
+
         self.DISTANCE_THRESHOLD = 2 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
@@ -73,6 +75,9 @@ class HaliteBotCode:
         if not self.use_best_path or any(self.can_attack_from_square(square) for square in border_squares):
             logging.debug("attack started, using original scheme")
             self.future_moves.clear()
+
+            self.dij = Dijkstra(self.game_map, self.id)
+
             self.update_move_targets2()
             self.use_best_path = False
         else:
@@ -319,48 +324,12 @@ class HaliteBotCode:
 
     def get_next_move(self, start: Square, target: Square) -> Move:
 
-        # this will figure out how to get to the desired location, moving only through owned territory
+        steps, path = self.dij.get_path(start, target)
 
-        # get the desired direction(s), handling the edges
-        if start.x == target.x:
-            east_west = STILL
-        elif start.x < target.x:
-            if abs(target.x - start.x) <= self.game_map.width / 2:
-                east_west = EAST
-            else:
-                east_west = WEST
-        else:
-            if abs(target.x - start.x) <= self.game_map.width / 2:
-                east_west = WEST
-            else:
-                east_west = EAST
-
-        if start.y == target.y:
-            north_south = STILL
-        elif start.y < target.y:
-            if abs(target.y - start.y) <= self.game_map.height / 2:
-                north_south = SOUTH
-            else:
-                north_south = NORTH
-        else:
-            if abs(target.y - start.y) <= self.game_map.height / 2:
-                north_south = NORTH
-            else:
-                north_south = SOUTH
-
-        # know the deisred direction, check if either is owned by self
-
-        # flip a coin here to see which direction to test first
-        if random.random() > 0.5:
-            test_directions = (north_south, east_west)
-        else:
-            test_directions = (east_west, north_south)
-
-        for direction in test_directions:
-            move_target = self.game_map.get_target(start, direction)
-
-            if direction != STILL and (move_target == target or move_target.owner == self.id):
-                return Move(start, direction)
+        if path is not None:
+            direction = self.game_map.get_direction(path[0], path[1])
+            logging.debug("graph direction %d", direction)
+            return Move(start, direction)
 
         return None
 
@@ -496,3 +465,34 @@ class Dijkstra:
             best = (0, None)
 
         return best
+
+    def get_path(self, start: Square, target: Square):
+        seen = set()
+        max_heap = [(0, start, ())]
+
+        while max_heap:
+            last_best = heappop(max_heap)
+            (future_value, node_current, path) = last_best
+
+            if node_current not in seen:
+
+                seen.add(node_current)
+
+                new_path = list(path)
+                new_path.append(node_current)
+
+                if node_current == target:
+                    return (future_value, new_path)
+
+                nodes_to_test = self.graph.get(node_current, ())  # type: List[Square]
+
+                for node_test in nodes_to_test:
+                    # check the nodes not currently on the path
+                    if node_test not in seen:
+                        # determine the time to get there
+                        new_future = future_value + 1
+
+                        heappush(max_heap,
+                                 (new_future, node_test, new_path))
+
+        return (None, None)

@@ -96,6 +96,14 @@ class GameMap:
     def get_square(self, x:int, y:int)-> Square:
         return self.contents[y][x]
 
+    def get_direction(self, start : Square, neighbor:Square):
+        for direc in [NORTH, SOUTH, EAST, WEST]:
+            if self.get_target(start, direc) == neighbor:
+                return direc
+                break
+
+        return -1
+
 #################################################################
 # Functions for communicating with the Halite game environment  #
 #################################################################
