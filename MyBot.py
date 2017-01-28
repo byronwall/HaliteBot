@@ -15,7 +15,6 @@ parser.add_argument('-D','--DISTANCE_THRESHOLD', help='Max distance to count as 
 parser.add_argument('-M','--MAX_DISTANCE', help='Max distance to allow move', type=int)
 parser.add_argument('-A','--ATTACK_DIST', help='Distance to force attack if available', type=int)
 parser.add_argument('-n','--name', help='Bot name')
-parser.add_argument('-ga','--GENETIC', help='Do the GA search', action="store_true")
 parser.add_argument('-T','--TIME_MAX', help='Time to take while finding moves', type=float)
 
 args = vars(parser.parse_args())
@@ -31,9 +30,6 @@ else:
 
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID, args)
-
-if args["GENETIC"]:
-    haliteBot.initialize_strategy()
 
 bot_name = "byronwall-ga1" if args["name"] is None else args["name"]
 hlt.send_init(bot_name)

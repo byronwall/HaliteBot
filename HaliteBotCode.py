@@ -29,34 +29,18 @@ class HaliteBotCode:
 
         self.future_moves = defaultdict(list)
 
+        self.total_frames = 10 * (self.game_map.height * self.game_map.width) ** 0.5
+
         self.best_path = []
         self.start_time = time.time()
         self.use_best_path = True
 
-        self.dij = None # type: Dijkstra
+        self.dij = None  # type: Dijkstra
 
-        self.DISTANCE_THRESHOLD = 2 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
-        self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
+        self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
+        self.MAX_DISTANCE = 5 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
         self.TIME_MAX = 0.85 if options["TIME_MAX"] is None else options["TIME_MAX"]
-
-    def initialize_strategy(self):
-        # this will generate the ideal path
-
-        self.update_owned_sites()
-
-        start = self.owned_sites[0]
-
-        search_steps = self.game_map.height * self.game_map.width / 5
-
-        dij = Dijkstra(self.game_map)
-        value, path = dij.do_genetic_search(start, search_steps)
-
-        logging.debug("best path: %d %d %d %s", search_steps, value, len(path), "".join(map(str, path)))
-
-        self.best_path = path
-
-        return
 
     def update(self, game_map: GameMap):
         self.game_map = game_map
@@ -81,9 +65,6 @@ class HaliteBotCode:
             self.update_best_moves_from_border()
             self.update_moves_with_best_target()
 
-        # logging.debug("update the moves")
-
-
         self.frame += 1
 
         return
@@ -92,7 +73,7 @@ class HaliteBotCode:
         # must stay at spot to build strength
         allow_move = True
 
-        if source.strength < source.production * 5:
+        if source.strength < source.production * 10:
             allow_move = False
 
         return allow_move
@@ -103,10 +84,6 @@ class HaliteBotCode:
 
         source = move.square
         target = self.game_map.get_target(source, move.direction)
-
-        # must stay for one turn to avoid constantly moving
-        # if self.time_at_square[source] <= 1:
-        #    allow_move = False
 
         # this should prevent large blocks from combining
         if allow_move:
@@ -134,8 +111,7 @@ class HaliteBotCode:
 
             if border_value == 0:
                 # nothing to attack
-                border_value = min((self.get_square_metric(neighbor) for neighbor in self.game_map.neighbors(square) if
-                                    neighbor.owner == 0), default=0)
+                border_value = 1000
 
         else:
             border_value = self.get_square_metric(square)
@@ -143,19 +119,20 @@ class HaliteBotCode:
         return border_value
 
     def get_square_metric(self, square: Square):
-        return square.production / (square.strength + 1)
+        return square.production  / (square.strength + 1)
+        return (square.production * (self.total_frames - self.frame) - square.strength) / 100
 
     def is_time_close(self) -> bool:
-        return time.time()-self.start_time > self.TIME_MAX
-
+        return time.time() - self.start_time > self.TIME_MAX
 
     def update_moves_with_best_target(self):
         # this will iterate through the targets, and find a path to get to them
 
         # make the graph
+        min_length = len(self.best_path) / 2
 
         # make list of exclusions
-        while len(self.best_path) and not self.is_time_close():
+        while len(self.best_path) > min_length and not self.is_time_close():
             logging.debug("size of best path %d", len(self.best_path))
             exclude = []
             frames_to_del = []
@@ -224,7 +201,6 @@ class HaliteBotCode:
 
         return
 
-
     def update_move_targets2(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
         border_sites = self.get_unowned_border()
@@ -247,36 +223,30 @@ class HaliteBotCode:
             # find the closest border spot
             min_location = None
             max_value = 0
+            min_distance = 1000
 
-            must_attack = False
+            should_move = location.strength > min(location.production * 40, 240)
 
             if not self.can_move_from(location):
                 continue
 
             for border_square in border_sites:
-                if must_attack and not can_attack[border_square]:
-                    continue
 
                 distance = self.game_map.get_distance(border_square, location)
 
-                if distance > self.MAX_DISTANCE:
+                if distance > self.MAX_DISTANCE and not should_move:
                     continue
-
-                # reset the best spot if this is the first to be attackable
-                if distance < self.ATTACK_DIST and can_attack[border_square] and not must_attack:
-                    min_location = None
-                    max_value = 0
-                    must_attack = True
 
                 # threshold the distance to allow for some movement
                 if distance <= self.DISTANCE_THRESHOLD:
                     distance = 1
 
-                border_value = self.get_square_value(border_square) / distance
+                border_value = self.get_square_value(border_square)
 
-                if border_value > max_value:
+                if distance<min_distance or(distance == min_distance and border_value > max_value):
                     min_location = border_square
                     max_value = border_value
+                    min_distance = distance
 
             # add a check here to see if move should be made
 
@@ -296,13 +266,11 @@ class HaliteBotCode:
                 for location in locations:
                     move = self.get_next_move(location, border_square)
 
-                    logging.debug("move to make %s", move)
-
                     if move is not None:
                         desired_moves[location] = move
 
         # this allows move to be checked a couple times to see if the situation improves
-        max_check = 5
+        max_check = 3
         times_checked = 0
         while len(desired_moves) > 0 and times_checked < max_check:
             if self.is_time_close():
@@ -405,8 +373,6 @@ class Dijkstra:
         max_heap = [(0, NodeAvail(start, None, 0), [], set(), [])]
         side_heap = []
 
-        is_first = True
-
         shortest_in_side_heap = size_max + 1
 
         while max_heap:
@@ -485,7 +451,6 @@ class Dijkstra:
                         # determine the time to get there
                         new_future = future_value + 1
 
-                        heappush(max_heap,
-                                 (new_future, node_test, new_path))
+                        heappush(max_heap, (new_future, node_test, new_path))
 
         return (None, None)
