@@ -24,7 +24,6 @@ class HaliteBotCode:
         self.game_map = game_map
         self.owned_sites = set()  # type: Set[Square]
         self.moves_this_frame = []
-        self.time_at_square = dict()  # type: Dict[Square, int]
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
 
@@ -40,9 +39,6 @@ class HaliteBotCode:
         self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
         self.TIME_MAX = 0.85 if options["TIME_MAX"] is None else options["TIME_MAX"]
-
-        for square in self.game_map:
-            self.time_at_square[square] = 0
 
     def initialize_strategy(self):
         # this will generate the ideal path
@@ -309,14 +305,13 @@ class HaliteBotCode:
         max_check = 5
         times_checked = 0
         while len(desired_moves) > 0 and times_checked < max_check:
+            if self.is_time_close():
+                break
             for key in list(desired_moves.keys()):
                 move = desired_moves[key]
                 if self.is_move_allowed(move):
                     desired_moves.pop(key)
                     self.moves_this_frame.append(move)
-                    # reset move counter if leaving own territory
-                    if self.game_map.get_target(move.square, move.direction).owner != self.id:
-                        self.time_at_square[move.square] = 0
 
             times_checked += 1
 
@@ -341,10 +336,8 @@ class HaliteBotCode:
         for square in self.game_map:
             if square.owner == self.id:
                 self.owned_sites.append(square)
-                self.time_at_square[square] += 1
                 self.expected_strength[square] = square.strength
             else:
-                self.time_at_square[square] = 0
                 self.expected_strength[square] = -square.strength
 
         return
