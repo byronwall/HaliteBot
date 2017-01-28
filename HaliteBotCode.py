@@ -46,6 +46,8 @@ class HaliteBotCode:
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
         self.TIME_MAX = 0.85 if options["TIME_MAX"] is None else options["TIME_MAX"]
 
+        self.TIME_MOVES = self.TIME_MAX + 0.05
+
     def do_init(self):
         # this will build the distance lookups
 
@@ -143,8 +145,12 @@ class HaliteBotCode:
         return square.production / (square.strength + 1)
         return (square.production * (self.total_frames - self.frame) - square.strength) / 100
 
-    def is_time_close(self) -> bool:
-        return time.time() - self.start_time > self.TIME_MAX
+    def is_time_close(self, use_lower=True) -> bool:
+        limit = self.TIME_MOVES
+        if use_lower:
+            limit = self.TIME_MAX
+
+        return time.time() - self.start_time > limit
 
     def update_moves_with_best_target(self):
         # this will iterate through the targets, and find a path to get to them
@@ -229,7 +235,7 @@ class HaliteBotCode:
         desired_moves = dict()  # type: Dict[Square, Move]
 
         # force check of core squares
-        for index in range(len(self.core_squares)//2):
+        for index in range(len(self.core_squares) // 2):
             self.core_squares.pop()
 
         # loop through owned pieces and make the calls to move them
@@ -328,7 +334,7 @@ class HaliteBotCode:
         max_check = 3
         times_checked = 0
         while len(desired_moves) > 0 and times_checked < max_check:
-            if self.is_time_close():
+            if self.is_time_close(False):
                 break
             for key in list(desired_moves.keys()):
                 move = desired_moves[key]
