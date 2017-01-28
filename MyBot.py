@@ -31,6 +31,9 @@ else:
 myID, gameMap = hlt.get_init()
 haliteBot = HaliteBotCode(gameMap, myID, args)
 
+# do the init steps
+haliteBot.do_init()
+
 bot_name = "byronwall-ga1" if args["name"] is None else args["name"]
 hlt.send_init(bot_name)
 

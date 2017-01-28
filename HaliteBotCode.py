@@ -35,12 +35,21 @@ class HaliteBotCode:
         self.start_time = time.time()
         self.use_best_path = True
 
+        self.border_sites = None
+        self.core_squares = set()  # type: Set[Square]
+        self.attack_squares = set()  # type: Set[Square]
+
         self.dij = None  # type: Dijkstra
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 5 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
         self.TIME_MAX = 0.85 if options["TIME_MAX"] is None else options["TIME_MAX"]
+
+    def do_init(self):
+        # this will build the distance lookups
+
+        return
 
     def update(self, game_map: GameMap):
         self.game_map = game_map
@@ -50,9 +59,10 @@ class HaliteBotCode:
         self.moves_this_frame = []
         self.update_owned_sites()
 
-        border_squares = self.get_unowned_border()
+        self.update_border()
+        self.update_attack_squares()
 
-        if not self.use_best_path or any(self.can_attack_from_square(square) for square in border_squares):
+        if not self.use_best_path or len(self.attack_squares):
             logging.debug("attack started, using original scheme")
             self.future_moves.clear()
 
@@ -66,6 +76,17 @@ class HaliteBotCode:
             self.update_moves_with_best_target()
 
         self.frame += 1
+
+        return
+
+    def update_attack_squares(self):
+        self.attack_squares.clear()
+
+        for square in self.border_sites:
+            if self.can_attack_from_square(square):
+                self.attack_squares.add(square)
+
+        logging.debug("size of attack squares %d", len(self.attack_squares))
 
         return
 
@@ -119,7 +140,7 @@ class HaliteBotCode:
         return border_value
 
     def get_square_metric(self, square: Square):
-        return square.production  / (square.strength + 1)
+        return square.production / (square.strength + 1)
         return (square.production * (self.total_frames - self.frame) - square.strength) / 100
 
     def is_time_close(self) -> bool:
@@ -191,11 +212,9 @@ class HaliteBotCode:
 
     def update_best_moves_from_border(self):
 
-        border_sites = self.get_unowned_border()
-
         self.best_path = []
 
-        for border_square in border_sites:
+        for border_square in self.border_sites:
             border_value = self.get_square_value(border_square)
             heappush(self.best_path, (-border_value, border_square))
 
@@ -203,38 +222,37 @@ class HaliteBotCode:
 
     def update_move_targets2(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
-        border_sites = self.get_unowned_border()
 
         # create a dict to assoc border sites
         border_assoc = defaultdict(list)  # type: Dict[Square, List[Square]]
 
         desired_moves = dict()  # type: Dict[Square, Move]
 
-        # update the can attack dict
-        can_attack = dict()  # type: Dict[Square, bool]
-        for border_square in border_sites:
-            can_attack[border_square] = self.can_attack_from_square(border_square)
+        # force check of core squares
+        for index in range(len(self.core_squares)//2):
+            self.core_squares.pop()
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             if self.is_time_close():
                 break
 
+            if location in self.core_squares:
+                continue
+
             # find the closest border spot
             min_location = None
             max_value = 0
             min_distance = 1000
 
-            should_move = location.strength > min(location.production * 40, 240)
-
             if not self.can_move_from(location):
                 continue
 
-            for border_square in border_sites:
+            for border_square in self.border_sites:
 
                 distance = self.game_map.get_distance(border_square, location)
 
-                if distance > self.MAX_DISTANCE and not should_move:
+                if distance > self.MAX_DISTANCE:
                     continue
 
                 # threshold the distance to allow for some movement
@@ -243,7 +261,7 @@ class HaliteBotCode:
 
                 border_value = self.get_square_value(border_square)
 
-                if distance<min_distance or(distance == min_distance and border_value > max_value):
+                if distance < min_distance or (distance == min_distance and border_value > max_value):
                     min_location = border_square
                     max_value = border_value
                     min_distance = distance
@@ -252,6 +270,43 @@ class HaliteBotCode:
 
             if min_location is not None:
                 border_assoc[min_location].append(location)
+            else:
+                self.core_squares.add(location)
+
+        core_del = list()
+
+        for core_square in self.core_squares:
+            if self.is_time_close():
+                break
+
+            # these are the ones that were skipped above since they're in the middle
+            should_move = core_square.strength > min(core_square.production * 30, 200)
+
+            if should_move:
+                logging.debug("core square should move %s", core_square)
+                # find the enemy
+                min_distance = 1000
+                square_target = None
+
+                for attack_square in self.attack_squares:
+                    distance = self.game_map.get_distance(core_square, attack_square)
+
+                    if distance < min_distance:
+                        min_distance = distance
+                        square_target = attack_square
+
+                # found an opponent
+                if square_target is None:
+                    continue
+
+                move = self.get_next_move(core_square, square_target)
+                if move is not None:
+                    logging.debug("sending %s to %s to attack", core_square, square_target)
+                    desired_moves[core_square] = move
+                    core_del.append(core_square)
+
+        for item in core_del:
+            self.core_squares.remove(item)
 
         # iterate through the border sites now to determine if to move
 
@@ -283,6 +338,8 @@ class HaliteBotCode:
 
             times_checked += 1
 
+        logging.debug("size of core pieces %d", len(self.core_squares))
+
         return
 
     def get_next_move(self, start: Square, target: Square) -> Move:
@@ -291,7 +348,6 @@ class HaliteBotCode:
 
         if path is not None:
             direction = self.game_map.get_direction(path[0], path[1])
-            logging.debug("graph direction %d", direction)
             return Move(start, direction)
 
         return None
@@ -310,7 +366,7 @@ class HaliteBotCode:
 
         return
 
-    def get_unowned_border(self) -> Set[Square]:
+    def update_border(self):
         # this will determine the spaces that border the owned pieces
         # iterate through the spaces
 
@@ -331,7 +387,9 @@ class HaliteBotCode:
                     break
 
         # do something with the border sites
-        return border_sites
+        self.border_sites = border_sites
+
+        return
 
 
 class Dijkstra:
