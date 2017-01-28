@@ -16,6 +16,7 @@ parser.add_argument('-M','--MAX_DISTANCE', help='Max distance to allow move', ty
 parser.add_argument('-A','--ATTACK_DIST', help='Distance to force attack if available', type=int)
 parser.add_argument('-n','--name', help='Bot name')
 parser.add_argument('-ga','--GENETIC', help='Do the GA search', action="store_true")
+parser.add_argument('-T','--TIME_MAX', help='Time to take while finding moves', type=float)
 
 args = vars(parser.parse_args())
 

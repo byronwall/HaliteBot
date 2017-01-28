@@ -32,10 +32,12 @@ class HaliteBotCode:
 
         self.best_path = []
         self.start_time = time.time()
+        self.use_best_path = True
 
         self.DISTANCE_THRESHOLD = 3 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 9 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
+        self.TIME_MAX = 0.85 if options["TIME_MAX"] is None else options["TIME_MAX"]
 
         for square in self.game_map:
             self.time_at_square[square] = 0
@@ -63,25 +65,23 @@ class HaliteBotCode:
 
         self.start_time = time.time()
 
-        logging.debug("reset the moves")
         self.moves_this_frame = []
-
-        if len(self.best_path):
-            logging.debug("should be targeting" + str(self.best_path[0]))
-        else:
-            logging.debug("done with best path target")
-
-        logging.debug("update owned sites")
         self.update_owned_sites()
 
-        logging.debug("updating target sites on border")
-        self.update_best_moves_from_border()
+        border_squares = self.get_unowned_border()
 
-        logging.debug("runnign check for path on best path")
-        self.update_moves_with_best_target()
+        if not self.use_best_path or any(self.can_attack_from_square(square) for square in border_squares):
+            logging.debug("attack started, using original scheme")
+            self.future_moves.clear()
+            self.update_move_targets2()
+            self.use_best_path = False
+        else:
+            logging.debug("no attack, searching best move")
+            self.update_best_moves_from_border()
+            self.update_moves_with_best_target()
 
         # logging.debug("update the moves")
-        # self.update_move_targets2()
+
 
         self.frame += 1
 
@@ -117,7 +117,7 @@ class HaliteBotCode:
 
         return allow_move
 
-    def can_attack_square(self, square: Square) -> bool:
+    def can_attack_from_square(self, square: Square) -> bool:
         # this will return a bool indicating if the square can be attacked
         return any(neighbor.owner not in [0, self.id] for neighbor in self.game_map.neighbors(square))
 
@@ -145,18 +145,17 @@ class HaliteBotCode:
         return square.production / (square.strength + 1)
 
     def is_time_close(self) -> bool:
-        return time.time()-self.start_time > 0.2
+        return time.time()-self.start_time > self.TIME_MAX
 
 
     def update_moves_with_best_target(self):
         # this will iterate through the targets, and find a path to get to them
 
         # make the graph
-        logging.debug("make the graph for the best check")
 
         # make list of exclusions
         while len(self.best_path) and not self.is_time_close():
-            logging .debug("size of best path %d", len(self.best_path))
+            logging.debug("size of best path %d", len(self.best_path))
             exclude = []
             frames_to_del = []
             for frame, moves in self.future_moves.items():
@@ -187,8 +186,6 @@ class HaliteBotCode:
             if path is None:
                 logging.debug("no path")
             else:
-                logging.debug("got the path %s", "".join(map(str, path)))
-
                 max_dist = 0
                 for node in path:
                     # get the max distance
@@ -204,7 +201,6 @@ class HaliteBotCode:
                             self.future_moves[self.frame + time_to_move].append(Move(node.node, direc))
                             break
 
-                logging.debug("future moves: %s", self.future_moves)
                 logging.debug("max_dist %d", max_dist)
 
             heappop(self.best_path)
@@ -240,10 +236,13 @@ class HaliteBotCode:
         # update the can attack dict
         can_attack = dict()  # type: Dict[Square, bool]
         for border_square in border_sites:
-            can_attack[border_square] = self.can_attack_square(border_square)
+            can_attack[border_square] = self.can_attack_from_square(border_square)
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
+            if self.is_time_close():
+                break
+
             # find the closest border spot
             min_location = None
             max_value = 0
@@ -254,10 +253,6 @@ class HaliteBotCode:
                 continue
 
             for border_square in border_sites:
-                if len(self.best_path):
-                    if not must_attack and not border_square in self.best_path[0:5]:
-                        continue
-
                 if must_attack and not can_attack[border_square]:
                     continue
 
@@ -354,7 +349,6 @@ class HaliteBotCode:
                 north_south = SOUTH
 
         # know the deisred direction, check if either is owned by self
-        logging.debug("directions available from %s move %d %d", start, north_south, east_west)
 
         # flip a coin here to see which direction to test first
         if random.random() > 0.5:
@@ -380,7 +374,6 @@ class HaliteBotCode:
                 self.owned_sites.append(square)
                 self.time_at_square[square] += 1
                 self.expected_strength[square] = square.strength
-                logging.debug("added owned site %s", square)
             else:
                 self.time_at_square[square] = 0
                 self.expected_strength[square] = -square.strength
@@ -593,6 +586,8 @@ class Dijkstra:
 
         is_first = True
 
+        shortest_in_side_heap = size_max + 1
+
         while max_heap:
             last_best = heappop(max_heap)
             (strength_total, node_current, path, nodes_avail, path_infos) = last_best
@@ -607,7 +602,14 @@ class Dijkstra:
                 new_path.append(node_current.node)
 
                 if -strength_total > strength_goal:
+                    if len(new_path) < shortest_in_side_heap:
+                        shortest_in_side_heap = len(new_path)
+
                     heappush(side_heap, (len(new_path), path_infos))
+                    continue
+
+                # throw out this route if longer than current shortest route
+                if len(new_path) > shortest_in_side_heap:
                     continue
 
                 nodes_to_test = self.graph.get(node_current.node, ())  # type: List[Square]
