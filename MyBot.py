@@ -45,11 +45,16 @@ if SHOULD_PROFILE:
 
 frame = 0
 
+TIME_MAX = 0.8 if args["TIME_MAX"] is None else args["TIME_MAX"]
+start_time = time.time()
+
 while True:
 
     gameMap.get_frame()
 
     logging.debug("FRAME START %d", frame)
+
+    start_time = time.time()
 
     should_profile = (myID == 1) and (frame % 50 == 0) and SHOULD_PROFILE
     if should_profile:
@@ -58,7 +63,7 @@ while True:
         haliteBot.update(gameMap)
 
     moves = haliteBot.moves_this_frame
-    logging.debug("moves to make %s", moves)
+
     hlt.send_frame(moves)
 
     frame += 1

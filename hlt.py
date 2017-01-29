@@ -29,7 +29,7 @@ class Square(_square):
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
     def __str__(self):
-        return "(%d,%d #%d)" % (self.x, self.y, self.strength)
+        return "(%d,%d #%d p%d)" % (self.x, self.y, self.strength, self.production)
 
 
 Move = namedtuple('Move', 'square direction')
