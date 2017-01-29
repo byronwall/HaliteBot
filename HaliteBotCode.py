@@ -67,6 +67,10 @@ class HaliteBotCode:
         self.moves_this_frame = []
         self.update_owned_sites()
 
+        # default move if time out
+        for square in self.owned_sites:
+            self.moves_this_frame.append(Move(square, EAST))
+
         self.update_border()
         self.update_attack_squares()
 
@@ -136,14 +140,14 @@ class HaliteBotCode:
         if square.strength == 0:
             border_value = sum(neighbor.strength
                                for neighbor in self.game_map.neighbors(square) if
-                               neighbor.owner not in [0, self.id])
+                               neighbor.owner not in [0, self.id]) * 10
 
             if border_value == 0:
                 # nothing to attack, value pieces near enemy greater... to avoid backing out of battle
                 if any(neighbor.owner not in [0, self.id] for neighbor in self.game_map.neighbors(square)):
-                    border_value = 1000
+                    border_value = 2
                 else:
-                    border_value = 500
+                    border_value = 1
 
         else:
             border_value = self.get_square_metric(square)
@@ -361,6 +365,10 @@ class HaliteBotCode:
         # this allows move to be checked a couple times to see if the situation improves
         max_check = 3
         times_checked = 0
+
+        if not is_time_out():
+            self.moves_this_frame.clear()
+
         while len(desired_moves) > 0 and times_checked < max_check:
             if is_time_out():
                 break
