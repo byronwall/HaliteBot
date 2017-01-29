@@ -215,6 +215,14 @@ class HaliteBotCode:
                     if node.prev_dist > max_dist:
                         max_dist = node.prev_dist
 
+                # check for 0 str move at the start... just a wait
+                node_del = []
+                for node in path:
+                    if node.prev_dist == max_dist and node.node.strength == 0:
+                        node_del.append(node)
+
+                for node in node_del:
+                    path.remove(node)
 
                 # add the moves in the future
                 for node in path:
