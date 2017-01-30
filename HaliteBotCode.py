@@ -113,7 +113,7 @@ class HaliteBotCode:
         # must stay at spot to build strength
         allow_move = True
 
-        if source.strength < source.production * 10:
+        if source.strength < source.production * 4:
             allow_move = False
 
         return allow_move
