@@ -1,6 +1,5 @@
 import random
 from typing import Dict
-from typing import FrozenSet
 from typing import List
 from typing import Set
 import time
@@ -70,13 +69,7 @@ class HaliteBotCode:
 
         # default move if time out
         for square in self.owned_sites:
-            frame_mod = self.frame % 3
-            if frame_mod == 0:
-                self.moves_this_frame.append(Move(square, EAST))
-            elif frame_mod == 1:
-                self.moves_this_frame.append(Move(square, NORTH))
-            else:
-                self.moves_this_frame.append(Move(square, STILL))
+            self.moves_this_frame.append(Move(square, EAST))
 
         self.update_border()
         self.update_attack_squares()
@@ -484,8 +477,6 @@ class Dijkstra:
 
         counter = 0
 
-        paths_tested = set() # type: Set[Set[Square]
-
         while max_heap:
             counter += 1
             if counter % 10 == 0:
@@ -502,13 +493,6 @@ class Dijkstra:
 
                 new_path = list(path)  # type: List[Square]
                 new_path.append(node_current.node)
-
-                # build the FrozenSet to add to tested paths
-                path_set = frozenset(new_path)
-                if path_set in paths_tested:
-                    continue
-
-                paths_tested.add(path_set)
 
                 # check if this increases the max distance, if so add the production in
                 if node_current.prev_dist > max_dist:

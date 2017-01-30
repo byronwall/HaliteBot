@@ -1,7 +1,7 @@
 #!/bin/bash
 
-BOT_1="python3 MyBot.py --logging -n bw-best-border -T 0.2"
-BOT_2="python3 'bots/2016 12 30, attempt to force attacks/MyBot.py'"
+BOT_1="python3 MyBot.py --logging -n bw-best-border -T 0.8"
+BOT_2="python3 'bots/2017 01 28d, default EAST/MyBot.py' -n prev-best -T 0.8"
 
 SIZE=50
 
