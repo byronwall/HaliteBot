@@ -287,9 +287,7 @@ class HaliteBotCode:
         self.best_path = []
 
         for border_square in self.border_sites:
-            x_wrap = border_square.x % self.game_map.width
-            y_wrap = border_square.y % self.game_map.height
-            border_value = self.blurred_values[x_wrap][y_wrap] + 2 * self.get_square_value(border_square)
+            border_value = self.blurred_values[border_square.y][border_square.x] + 2 * self.get_square_value(border_square)
             heappush(self.best_path, (-border_value, border_square))
 
         return
