@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-FILE=200
+FILE=50
 
 cd profiles
 pyprof2calltree -i "profile-$FILE.pyprof" -k

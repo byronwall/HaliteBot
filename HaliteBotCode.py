@@ -6,9 +6,13 @@ from typing import Set
 import time
 from hlt import *
 import logging
+import scipy
 
 from collections import defaultdict
 from heapq import *
+
+import numpy as np
+from scipy.ndimage.filters import gaussian_filter
 
 Edge = namedtuple('Edge', 'left right')
 
@@ -38,7 +42,7 @@ class HaliteBotCode:
         self.best_path = []
         self.use_best_path = True
 
-        self.border_sites = None
+        self.border_sites = None # type: Set[Square]
         self.core_squares = set()  # type: Set[Square]
         self.attack_squares = set()  # type: Set[Square]
 
@@ -46,6 +50,8 @@ class HaliteBotCode:
         self.squares_to_skip = dict()  # type: Dict[Square, int]
 
         self.dij = None  # type: Dijkstra
+
+        self.blurred_values = None
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 5 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
@@ -56,6 +62,24 @@ class HaliteBotCode:
 
     def do_init(self):
         # this will build the distance lookups
+
+        # build the blurred score ratios
+
+
+        # get an array of floats for production / str + 1 for the game map
+
+        all_data = []
+        for y in range(self.game_map.height):
+            data = []
+
+            for x in range(self.game_map.width):
+                square = self.game_map.get_square(x, y)
+                data.append(square.production / (square.strength + 1))
+
+            all_data.append(data)
+
+        a = np.array(all_data)
+        self.blurred_values = gaussian_filter(a, sigma=1, mode="wrap")
 
         return
 
@@ -127,7 +151,7 @@ class HaliteBotCode:
 
         # this should prevent large blocks from combining
         if allow_move:
-            if 280 - self.expected_strength[target] < source.strength:
+            if 350 - self.expected_strength[target] < source.strength:
                 allow_move = False
             else:
                 self.expected_strength[target] += source.strength
@@ -162,6 +186,7 @@ class HaliteBotCode:
         return border_value
 
     def get_square_metric(self, square: Square):
+        #return (square.production * (self.total_frames - self.frame) - square.strength) / 10
         return square.production / (square.strength + 1)
 
     def update_moves_with_best_target(self):
@@ -179,6 +204,8 @@ class HaliteBotCode:
 
         for item in skip_del:
             self.squares_to_skip.pop(item)
+
+        dij = Dijkstra(self.game_map, self.id)
 
         # make list of exclusions
         while len(self.best_path) > min_length and not is_time_out(0.1):
@@ -207,7 +234,7 @@ class HaliteBotCode:
 
             logging.debug("size of excluded squares %d", len(exclude))
 
-            dij = Dijkstra(self.game_map, self.id, exclude)
+            dij.update_excludes(exclude)
 
             logging.debug("going for the target %s with value %f and %f", target, value, time.time() - start_time)
 
@@ -260,7 +287,7 @@ class HaliteBotCode:
         self.best_path = []
 
         for border_square in self.border_sites:
-            border_value = self.get_square_value(border_square)
+            border_value = self.blurred_values[border_square.x][border_square.y] + 2 * self.get_square_value(border_square)
             heappush(self.best_path, (-border_value, border_square))
 
         return
@@ -282,7 +309,7 @@ class HaliteBotCode:
             if is_time_out(0.1):
                 break
 
-            if location in self.core_squares:
+            if location.strength == 0 or location in self.core_squares:
                 continue
 
             # find the closest border spot
@@ -361,7 +388,7 @@ class HaliteBotCode:
             for location in locations:
                 total_strength += location.strength
 
-            if total_strength > border_square.strength or self.can_attack_from_square(border_square):
+            if total_strength > border_square.strength:
                 # if so, move that direction
                 for location in locations:
                     move = self.get_next_move(location, border_square)
@@ -370,7 +397,7 @@ class HaliteBotCode:
                         desired_moves[location] = move
 
         # this allows move to be checked a couple times to see if the situation improves
-        max_check = 3
+        max_check = 5
         times_checked = 0
 
         if not is_time_out():
@@ -460,18 +487,24 @@ class Dijkstra:
             if square in exclude:
                 continue
 
-            for direction in [EAST, WEST, NORTH, SOUTH]:
-                edge = Edge(square, game_map.get_target(square, direction))
-                edges.append(edge)
+            for target in game_map.neighbors(square):
+                self.graph[square].append(target)
+                self.graph[target].append(square)
 
-        for edge in edges:
-            if edge.right not in exclude:
-                self.graph[edge.left].append(edge.right)
+        self.update_excludes(exclude)
 
-            if edge.left not in exclude:
-                self.graph[edge.right].append(edge.left)
+    def update_excludes(self, exclude = []):
+
+        for del_sq in exclude:
+            if del_sq in self.graph:
+                self.graph.pop(del_sq)
+
+        return
 
     def get_path_with_strength(self, start: Square, size_max: int, strength_goal=0):
+
+        if start not in self.graph:
+            (0, None)
 
         if strength_goal == 0:
             strength_goal = 10 if start.strength == 0 else start.strength
@@ -484,14 +517,14 @@ class Dijkstra:
 
         counter = 0
 
-        paths_tested = set() # type: Set[Set[Square]
+        paths_tested = set()  # type: Set[Set[Square]
 
         while max_heap:
             counter += 1
             if counter % 10 == 0:
                 if is_time_out(0.1):
                     break
-            last_best = heappop(max_heap) # type: Tuple[int, NodeAvail, Set[NodeAvail], List[NodeAvail], int, int]
+            last_best = heappop(max_heap)  # type: Tuple[int, NodeAvail, Set[NodeAvail], List[NodeAvail], int, int]
             (strength_total, node_current, path, nodes_avail, path_infos, prod_avail, max_dist) = last_best
 
             if node_current.node not in path:
@@ -534,7 +567,8 @@ class Dijkstra:
 
                 for node in nodes_to_test:
                     # only test those nodes we own
-                    if node.owner == self.id:
+                    # testing to see if it is in the graph ensures that it shoudl be accessible
+                    if node in self.graph and node.owner == self.id:
                         nodes_avail.add(NodeAvail(node, node_current.node, node_current.prev_dist + 1))
 
                 for node_test in nodes_avail:
@@ -580,7 +614,7 @@ class Dijkstra:
 
                 for node_test in nodes_to_test:
                     # check the nodes not currently on the path
-                    if node_test not in seen:
+                    if node_test not in seen and node_test in self.graph:
                         # determine the time to get there
                         new_future = future_value + 1
 
