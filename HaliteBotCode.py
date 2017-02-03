@@ -43,7 +43,6 @@ class HaliteBotCode:
         self.use_best_path = True
 
         self.border_sites = None # type: Set[Square]
-        self.core_squares = set()  # type: Set[Square]
         self.attack_squares = set()  # type: Set[Square]
 
         # will contain the frame where a piece can be checked again
@@ -54,7 +53,7 @@ class HaliteBotCode:
         self.blurred_values = None
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
-        self.MAX_DISTANCE = 5 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
+        self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
         self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
 
         global TIME_MAX
@@ -300,16 +299,17 @@ class HaliteBotCode:
 
         desired_moves = dict()  # type: Dict[Square, Move]
 
-        # force check of core squares
-        for index in range(len(self.core_squares) // 2):
-            self.core_squares.pop()
+        border_to_test = sorted(self.border_sites, key=self.get_square_value, reverse=True)
+        logging.debug("size of the border before %d", len(border_to_test))
+        border_to_test = border_to_test[:len(border_to_test)//2]
+        logging.debug("size of the border after %d", len(border_to_test))
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             if is_time_out(0.1):
                 break
 
-            if location.strength == 0 or location in self.core_squares:
+            if location.strength == 0:
                 continue
 
             # find the closest border spot
@@ -320,7 +320,9 @@ class HaliteBotCode:
             if not self.can_move_from(location):
                 continue
 
-            for border_square in self.border_sites:
+            for border_square in border_to_test:
+                if is_time_out(0.1):
+                    break
 
                 distance = self.game_map.get_distance(border_square, location)
 
@@ -342,43 +344,6 @@ class HaliteBotCode:
 
             if min_location is not None:
                 border_assoc[min_location].append(location)
-            else:
-                self.core_squares.add(location)
-
-        core_del = list()
-
-        for core_square in self.core_squares:
-            if is_time_out(0.1):
-                break
-
-            # these are the ones that were skipped above since they're in the middle
-            should_move = core_square.strength > min(core_square.production * 30, 200)
-
-            if should_move:
-                logging.debug("core square should move %s", core_square)
-                # find the enemy
-                min_distance = 1000
-                square_target = None
-
-                for attack_square in self.attack_squares:
-                    distance = self.game_map.get_distance(core_square, attack_square)
-
-                    if distance < min_distance:
-                        min_distance = distance
-                        square_target = attack_square
-
-                # found an opponent
-                if square_target is None:
-                    continue
-
-                move = self.get_next_move(core_square, square_target)
-                if move is not None:
-                    logging.debug("sending %s to %s to attack", core_square, square_target)
-                    desired_moves[core_square] = move
-                    core_del.append(core_square)
-
-        for item in core_del:
-            self.core_squares.remove(item)
 
         # iterate through the border sites now to determine if to move
 
@@ -413,8 +378,6 @@ class HaliteBotCode:
                     self.moves_this_frame.append(move)
 
             times_checked += 1
-
-        logging.debug("size of core pieces %d", len(self.core_squares))
 
         return
 
@@ -616,7 +579,8 @@ class Dijkstra:
                     # check the nodes not currently on the path
                     if node_test not in seen and node_test in self.graph:
                         # determine the time to get there
-                        new_future = future_value + 1
+                        # try a little A* here
+                        new_future = future_value + 1 + self.game_map.get_distance(node_test, target)
 
                         heappush(max_heap, (new_future, node_test, new_path))
 
