@@ -93,7 +93,7 @@ class HaliteBotCode:
         self.update_attack_squares()
 
         self.dij = Dijkstra(self.game_map, self.id)
-        self.update_edge_squares(self.MAX_DISTANCE, True)
+        self.update_edge_squares(self.MAX_DISTANCE, False)
 
         logging.debug("skip squares contains %s", self.squares_to_skip)
         self.update_skip_squares()  # make list of exclusions
