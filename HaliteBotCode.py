@@ -52,8 +52,7 @@ class HaliteBotCode:
         self.inner_border = set()
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
-        self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
-        self.ATTACK_DIST = 3 if options["ATTACK_DIST"] is None else options["ATTACK_DIST"]
+        self.MAX_DISTANCE = 9 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
 
         global TIME_MAX
         TIME_MAX = 0.80 if options["TIME_MAX"] is None else options["TIME_MAX"]
@@ -94,19 +93,23 @@ class HaliteBotCode:
         self.update_attack_squares()
 
         self.dij = Dijkstra(self.game_map, self.id)
-        self.update_edge_squares(5, True)
+        self.update_edge_squares(self.MAX_DISTANCE, True)
 
-        if not self.use_best_path or len(self.attack_squares):
+        logging.debug("skip squares contains %s", self.squares_to_skip)
+        self.update_skip_squares()  # make list of exclusions
+
+        # use the old scheme if able to attack
+        if not self.use_best_path or any(self.can_attack_from_square(square) for square in self.border_sites):
             logging.debug("attack started, using original scheme")
 
             self.update_move_targets2()
+            self.update_moves_for_interior()
+
             self.use_best_path = False
         else:
             logging.debug("no attack, searching best move")
             self.update_best_moves_from_border()
             self.update_moves_with_best_target()
-
-        self.update_moves_for_interior()
 
         for move in self.future_moves[self.frame]:
             logging.debug("move added: %s", move)
@@ -121,7 +124,7 @@ class HaliteBotCode:
     def update_edge_squares(self, dist: int, should_print=False):
 
         # this updates the squares that are on the edge
-        self.edge_squares, self.inner_border = self.dij.get_squares_in_range(self.border_sites, dist)
+        self.edge_squares, self.inner_border = self.dij.get_squares_in_range(self.attack_squares, dist)
 
         # this will print the map to a file to be viewed as a heatmap
         if should_print:
@@ -144,11 +147,18 @@ class HaliteBotCode:
 
         return
 
+    def has_zero_str_neighbors(self, square):
+        for neighbor in self.game_map.neighbors(square):
+            if neighbor.strength == 0 or neighbor.owner == self.id:
+                return True
+
+        return False
+
     def update_attack_squares(self):
         self.attack_squares.clear()
 
         for square in self.border_sites:
-            if self.can_attack_from_square(square):
+            if self.can_attack_from_square(square) or self.has_zero_str_neighbors(square):
                 self.attack_squares.add(square)
 
         logging.debug("size of attack squares %d", len(self.attack_squares))
@@ -159,7 +169,7 @@ class HaliteBotCode:
         # must stay at spot to build strength
         allow_move = True
 
-        if source.strength < source.production * 4:
+        if source.strength < max(source.production * 4, 50):
             allow_move = False
 
         return allow_move
@@ -217,17 +227,6 @@ class HaliteBotCode:
         # make the graph
         min_length = len(self.best_path) / 2
 
-        skip_del = []
-        logging.debug("skip squares contains %s", self.squares_to_skip)
-        for square, frame in self.squares_to_skip.items():
-            if frame < self.frame:
-                skip_del.append(square)
-                logging.debug("removing target from skip %s", square)
-
-        for item in skip_del:
-            self.squares_to_skip.pop(item)
-
-        # make list of exclusions
         while len(self.best_path) > min_length and not is_time_out(0.1):
             logging.debug("size of best path %d", len(self.best_path))
 
@@ -276,6 +275,17 @@ class HaliteBotCode:
 
         return
 
+    def update_skip_squares(self):
+        skip_del = []
+        for square, frame in self.squares_to_skip.items():
+            if frame < self.frame:
+                skip_del.append(square)
+                logging.debug("removing target from skip %s", square)
+        for item in skip_del:
+            self.squares_to_skip.pop(item)
+
+        return
+
     def set_moves_for_path(self, path):
         max_dist = 0
         for node in path:
@@ -306,7 +316,7 @@ class HaliteBotCode:
         self.best_path = []
 
         for border_square in self.border_sites:
-            border_value = self.blurred_values[border_square.y][border_square.x] + 2 * self.get_square_value(
+            border_value = self.blurred_values[border_square.y][border_square.x] + self.get_square_value(
                 border_square)
             heappush(self.best_path, (-border_value, border_square))
 
@@ -318,31 +328,33 @@ class HaliteBotCode:
         # iterate the edge squares to add to exclude
         # get the border squares
 
-        self.dij.update_excludes((square for square in self.edge_squares if square not in self.inner_border))
+        new_dij = Dijkstra(self.game_map, self.id)
+        for square in self.border_sites:
+            new_dij.add_square_and_neighbors(square)
 
-        new_excludes = set()
-
-        for frame, list_of_moves in self.future_moves.items():
-            for move in list_of_moves:
-                new_excludes.add(move.square)
-
-        # iterate the interior border and find a path to the square
-        for inner_border_sq in self.inner_border:
-            logging.debug("testing inner border %s", inner_border_sq)
-
+        for square in self.owned_sites:
             if is_time_out():
-                logging.debug("had to interrupt, no time")
+                logging.debug("ran out of time in interior")
                 break
 
-            value, path = self.dij.get_path_with_strength(inner_border_sq, 3, 100, 500)
+            if square in self.edge_squares or square in self.squares_to_skip or not self.can_move_from(square):
+                continue
 
-            if path is not None:
-                self.set_moves_for_path(path)
+            min_distance = 1000
+            target_square = None
 
-                for node_avail in path:
-                    new_excludes.add(node_avail.node)
+            squares_to_try = self.attack_squares if len(self.attack_squares) else self.border_sites
 
-                self.dij.update_excludes(new_excludes)
+            for attack_square in squares_to_try:
+                distance = self.game_map.get_distance(square, attack_square)
+                if distance < min_distance:
+                    target_square = attack_square
+                    min_distance = distance
+
+            # this will move the square for so many moves
+            self.add_future_moves(square, target_square)
+
+        # iterate the interior find the closest enemy square
 
         return
 
@@ -365,6 +377,7 @@ class HaliteBotCode:
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             if is_time_out(0.1):
+                logging.debug("ran out of time at start in update_move_targets2")
                 break
 
             # skip those squares not in the edge
@@ -384,6 +397,7 @@ class HaliteBotCode:
 
             for border_square in border_to_test:
                 if is_time_out(0.1):
+                    logging.debug("ran out of time at middle in update_move_targets2")
                     break
 
                 distance = self.game_map.get_distance(border_square, location)
@@ -423,11 +437,9 @@ class HaliteBotCode:
         max_check = 5
         times_checked = 0
 
-        if not is_time_out():
-            self.moves_this_frame.clear()
-
         while len(desired_moves) > 0 and times_checked < max_check:
             if is_time_out():
+                logging.debug("ran out of time making moves in update_move_targets2")
                 break
             for key in list(desired_moves.keys()):
                 move = desired_moves[key]
@@ -438,6 +450,32 @@ class HaliteBotCode:
             times_checked += 1
 
         return
+
+    def add_future_moves(self, start: Square, target: Square) -> Move:
+
+        steps, path = self.dij.get_path(start, target)
+
+        if path is not None:
+            frames_ahead = 0
+            while frames_ahead < len(path) - 1:
+
+                source = path[0 + frames_ahead]
+                dest = path[1 + frames_ahead]
+
+                if dest in self.squares_to_skip or source in self.squares_to_skip:
+                    break
+
+                if dest in self.edge_squares:
+                    break
+
+                direction = self.game_map.get_direction(source, dest)
+                logging.debug("adding future move from %s to %s in %d", source, dest, frames_ahead)
+                self.future_moves[self.frame + frames_ahead].append(Move(start, direction))
+                self.squares_to_skip[dest] = self.frame + frames_ahead + 2
+
+                frames_ahead += 1
+
+        return None
 
     def get_next_move(self, start: Square, target: Square) -> Move:
 

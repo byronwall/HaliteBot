@@ -7,7 +7,7 @@ from HaliteBotCode import *
 import matplotlib.pyplot as plt
 import glob
 
-frame = 300
+frame = 116
 
 files = glob.glob("logs/maps/%d.txt" % frame)
 print(files)
