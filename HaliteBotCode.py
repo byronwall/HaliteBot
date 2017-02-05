@@ -333,7 +333,7 @@ class HaliteBotCode:
             new_dij.add_square_and_neighbors(square)
 
         for square in self.owned_sites:
-            if is_time_out():
+            if is_time_out(0.05):
                 logging.debug("ran out of time in interior")
                 break
 
@@ -346,6 +346,9 @@ class HaliteBotCode:
             squares_to_try = self.attack_squares if len(self.attack_squares) else self.border_sites
 
             for attack_square in squares_to_try:
+                if is_time_out(0.05):
+                    logging.debug("ran out of time in interior check")
+                    break
                 distance = self.game_map.get_distance(square, attack_square)
                 if distance < min_distance:
                     target_square = attack_square

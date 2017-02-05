@@ -61,10 +61,10 @@ class Dijkstra:
 
         shortest_in_side_heap = size_max + 1
 
-        counter = 0
 
         paths_tested = set()  # type: Set[Set[Square]
 
+        counter = 0
         while max_heap:
             counter += 1
             if counter % 10 == 0:
@@ -144,7 +144,14 @@ class Dijkstra:
         seen = set()
         max_heap = [(0, start, ())]
 
+        counter = 0
         while max_heap:
+            counter += 1
+            if counter % 10 == 0:
+                # this seems to be required becuase of cyclic imports
+                from HaliteBotCode import is_time_out
+                if is_time_out(0.1):
+                    break
             last_best = heappop(max_heap)
             (future_value, node_current, path) = last_best
 
@@ -208,37 +215,3 @@ class Dijkstra:
                         heappush(max_heap, (new_future, node_test))
 
         return (final_range, inner_border)
-
-    def get_closest_enemy_path(self, start: Square):
-        seen = set()
-        max_heap = [(0, start, ())]
-
-        while max_heap:
-            from HaliteBotCode import is_time_out
-            if is_time_out():
-                break
-            last_best = heappop(max_heap) # type: Tuple[int, Square, List[Square]]
-            (future_value, node_current, path) = last_best
-
-            if node_current not in seen:
-
-                seen.add(node_current)
-
-                new_path = list(path)
-                new_path.append(node_current)
-
-                if node_current.owner > 0 and node_current.owner != self.id:
-                    return (future_value, new_path)
-
-                nodes_to_test = self.graph.get(node_current, ())  # type: List[Square]
-
-                for node_test in nodes_to_test:
-                    # check the nodes not currently on the path
-                    if node_test not in seen:
-                        # determine the time to get there
-                        # try a little A* here
-                        new_future = future_value + 1
-
-                        heappush(max_heap, (new_future, node_test, new_path))
-
-        return (None, None)
