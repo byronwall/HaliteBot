@@ -1,14 +1,18 @@
+import random
+from typing import Dict
+from typing import FrozenSet
+from typing import List
+from typing import Set
 import time
+from hlt import *
+import logging
+import scipy
+
 from collections import defaultdict
 from heapq import *
-from typing import Dict
-from typing import Set
 
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
-
-from GraphOps import Dijkstra, NodeAvail
-from hlt import *
 
 Edge = namedtuple('Edge', 'left right')
 
@@ -18,7 +22,7 @@ start_time = time.time()
 TIME_MAX = 0.8
 
 
-def is_time_out(delta=0.0):
+def is_time_out(delta=0):
     return time.time() - start_time > TIME_MAX - delta
 
 
@@ -31,14 +35,14 @@ class HaliteBotCode:
         self.expected_strength = dict()  # type: Dict[Square, int]
         self.frame = 0
 
-        self.future_moves = defaultdict(list)  # type: Dict[int, List[Move]]
+        self.future_moves = defaultdict(list)
 
         self.total_frames = 10 * (self.game_map.height * self.game_map.width) ** 0.5
 
         self.best_path = []
         self.use_best_path = True
 
-        self.border_sites = None  # type: Set[Square]
+        self.border_sites = None # type: Set[Square]
         self.attack_squares = set()  # type: Set[Square]
 
         # will contain the frame where a piece can be checked again
@@ -47,9 +51,6 @@ class HaliteBotCode:
         self.dij = None  # type: Dijkstra
 
         self.blurred_values = None
-
-        self.edge_squares = set()
-        self.inner_border = set()
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
         self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
@@ -88,16 +89,26 @@ class HaliteBotCode:
         start_time = time.time()
 
         self.moves_this_frame = []
-
         self.update_owned_sites()
+
+        # default move if time out
+        for square in self.owned_sites:
+            frame_mod = self.frame % 3
+            if frame_mod == 0:
+                self.moves_this_frame.append(Move(square, EAST))
+            elif frame_mod == 1:
+                self.moves_this_frame.append(Move(square, NORTH))
+            else:
+                self.moves_this_frame.append(Move(square, STILL))
+
         self.update_border()
         self.update_attack_squares()
 
-        self.dij = Dijkstra(self.game_map, self.id)
-        self.update_edge_squares(5, True)
-
         if not self.use_best_path or len(self.attack_squares):
             logging.debug("attack started, using original scheme")
+            self.future_moves.clear()
+
+            self.dij = Dijkstra(self.game_map, self.id)
 
             self.update_move_targets2()
             self.use_best_path = False
@@ -106,41 +117,7 @@ class HaliteBotCode:
             self.update_best_moves_from_border()
             self.update_moves_with_best_target()
 
-        self.update_moves_for_interior()
-
-        for move in self.future_moves[self.frame]:
-            logging.debug("move added: %s", move)
-            self.moves_this_frame.append(move)
-
         self.frame += 1
-
-        logging.debug("total time for update: %f", time.time() - start_time)
-
-        return
-
-    def update_edge_squares(self, dist: int, should_print=False):
-
-        # this updates the squares that are on the edge
-        self.edge_squares, self.inner_border = self.dij.get_squares_in_range(self.border_sites, dist)
-
-        # this will print the map to a file to be viewed as a heatmap
-        if should_print:
-            all_data = []
-            for y in range(self.game_map.height):
-                data = []
-                for x in range(self.game_map.width):
-                    value = 0
-                    square = self.game_map.get_square(x, y)
-                    if square in self.border_sites:
-                        value = 1
-                    elif square in self.inner_border:
-                        value = 2
-                    elif square in self.edge_squares:
-                        value = 3
-                    data.append(value)
-                all_data.append(data)
-            a = np.array(all_data)
-            np.savetxt("logs/maps/%d.txt" % self.frame, a, "%d")
 
         return
 
@@ -208,7 +185,7 @@ class HaliteBotCode:
         return border_value
 
     def get_square_metric(self, square: Square):
-        # return (square.production * (self.total_frames - self.frame) - square.strength) / 10
+        #return (square.production * (self.total_frames - self.frame) - square.strength) / 10
         return square.production / (square.strength + 1)
 
     def update_moves_with_best_target(self):
@@ -226,6 +203,8 @@ class HaliteBotCode:
 
         for item in skip_del:
             self.squares_to_skip.pop(item)
+
+        dij = Dijkstra(self.game_map, self.id)
 
         # make list of exclusions
         while len(self.best_path) > min_length and not is_time_out(0.1):
@@ -254,19 +233,41 @@ class HaliteBotCode:
 
             logging.debug("size of excluded squares %d", len(exclude))
 
-            self.dij.update_excludes(exclude)
+            dij.update_excludes(exclude)
 
             logging.debug("going for the target %s with value %f and %f", target, value, time.time() - start_time)
 
             # get the moves
-            value, path = self.dij.get_path_with_strength(target, 5)
+            value, path = dij.get_path_with_strength(target, 5)
 
             path = path  # type: List[NodeAvail]
 
             if path is None:
                 logging.debug("no path")
             else:
-                max_dist = self.set_moves_for_path(path)
+                max_dist = 0
+                for node in path:
+                    # get the max distance
+                    logging.debug("node: %s, prev:%s, dist:%d", node.node, node.previous, node.prev_dist)
+                    if node.prev_dist > max_dist:
+                        max_dist = node.prev_dist
+
+                # check for 0 str move at the start... just a wait
+                node_del = []
+                for node in path:
+                    if node.prev_dist == max_dist and node.node.strength == 0:
+                        node_del.append(node)
+
+                for node in node_del:
+                    path.remove(node)
+
+                # add the moves in the future
+                for node in path:
+                    for direc in [NORTH, SOUTH, EAST, WEST]:
+                        if self.game_map.get_target(node.node, direc) == node.previous:
+                            time_to_move = max_dist - node.prev_dist
+                            self.future_moves[self.frame + time_to_move].append(Move(node.node, direc))
+                            break
 
                 self.squares_to_skip[target] = self.frame + max_dist - 1
 
@@ -274,75 +275,19 @@ class HaliteBotCode:
 
             heappop(self.best_path)
 
+        # add the moves in
+
+        self.moves_this_frame = self.future_moves[self.frame]
+
         return
-
-    def set_moves_for_path(self, path):
-        max_dist = 0
-        for node in path:
-            # get the max distance
-            logging.debug("node: %s, prev:%s, dist:%d", node.node, node.previous, node.prev_dist)
-            if node.prev_dist > max_dist:
-                max_dist = node.prev_dist
-
-        # check for 0 str move at the start... just a wait
-        node_del = []
-        for node in path:
-            if node.prev_dist == max_dist and node.node.strength == 0:
-                node_del.append(node)
-        for node in node_del:
-            path.remove(node)
-
-        # add the moves in the future
-        for node in path:
-            for direc in [NORTH, SOUTH, EAST, WEST]:
-                if self.game_map.get_target(node.node, direc) == node.previous:
-                    time_to_move = max_dist - node.prev_dist
-                    self.future_moves[self.frame + time_to_move].append(Move(node.node, direc))
-                    break
-        return max_dist
 
     def update_best_moves_from_border(self):
 
         self.best_path = []
 
         for border_square in self.border_sites:
-            border_value = self.blurred_values[border_square.y][border_square.x] + 2 * self.get_square_value(
-                border_square)
+            border_value = self.blurred_values[border_square.y][border_square.x] + 2 * self.get_square_value(border_square)
             heappush(self.best_path, (-border_value, border_square))
-
-        return
-
-    def update_moves_for_interior(self):
-        # this will try to push the square in the middle to the edge
-
-        # iterate the edge squares to add to exclude
-        # get the border squares
-
-        self.dij.update_excludes((square for square in self.edge_squares if square not in self.inner_border))
-
-        new_excludes = set()
-
-        for frame, list_of_moves in self.future_moves.items():
-            for move in list_of_moves:
-                new_excludes.add(move.square)
-
-        # iterate the interior border and find a path to the square
-        for inner_border_sq in self.inner_border:
-            logging.debug("testing inner border %s", inner_border_sq)
-
-            if is_time_out():
-                logging.debug("had to interrupt, no time")
-                break
-
-            value, path = self.dij.get_path_with_strength(inner_border_sq, 3, 100, 500)
-
-            if path is not None:
-                self.set_moves_for_path(path)
-
-                for node_avail in path:
-                    new_excludes.add(node_avail.node)
-
-                self.dij.update_excludes(new_excludes)
 
         return
 
@@ -355,21 +300,14 @@ class HaliteBotCode:
         desired_moves = dict()  # type: Dict[Square, Move]
 
         border_to_test = sorted(self.border_sites, key=self.get_square_value, reverse=True)
-
         logging.debug("size of the border before %d", len(border_to_test))
-
-        border_to_test = border_to_test[:len(border_to_test) // 2]
-
+        border_to_test = border_to_test[:len(border_to_test)//2]
         logging.debug("size of the border after %d", len(border_to_test))
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
             if is_time_out(0.1):
                 break
-
-            # skip those squares not in the edge
-            if location not in self.edge_squares:
-                continue
 
             if location.strength == 0:
                 continue
@@ -388,6 +326,9 @@ class HaliteBotCode:
 
                 distance = self.game_map.get_distance(border_square, location)
 
+                if distance > self.MAX_DISTANCE:
+                    continue
+
                 # threshold the distance to allow for some movement
                 if distance <= self.DISTANCE_THRESHOLD:
                     distance = 1
@@ -405,6 +346,7 @@ class HaliteBotCode:
                 border_assoc[min_location].append(location)
 
         # iterate through the border sites now to determine if to move
+
         for border_square, locations in border_assoc.items():
             # get the sum of the strengths
             total_strength = 0
@@ -487,3 +429,162 @@ class HaliteBotCode:
         self.border_sites = border_sites
 
         return
+
+
+class Dijkstra:
+    squares = []  # type: List[Square]
+
+    def __init__(self, game_map: GameMap, owner_required=0, exclude=[]):
+        # iterate through game map
+        self.game_map = game_map  # type: GameMap
+        self.id = owner_required
+        self.graph = defaultdict(list)  # type: Dict[Square, List[Square]]
+
+        edges = []  # type: List[Edge]
+        for square in game_map:
+            # create edge from down and right
+            if owner_required > 0 and square.owner != owner_required:
+                # only want squares with a certain owner
+                continue
+
+            if square in exclude:
+                continue
+
+            for target in game_map.neighbors(square):
+                self.graph[square].append(target)
+                self.graph[target].append(square)
+
+        self.update_excludes(exclude)
+
+    def update_excludes(self, exclude = []):
+
+        for del_sq in exclude:
+            if del_sq in self.graph:
+                self.graph.pop(del_sq)
+
+        return
+
+    def get_path_with_strength(self, start: Square, size_max: int, strength_goal=0):
+
+        if start not in self.graph:
+            (0, None)
+
+        if strength_goal == 0:
+            strength_goal = 10 if start.strength == 0 else start.strength
+
+        # 'value prod_avail time_to_reach steps'
+        max_heap = [(0, NodeAvail(start, None, 0), [], set(), [], 0, 1)]
+        side_heap = []
+
+        shortest_in_side_heap = size_max + 1
+
+        counter = 0
+
+        paths_tested = set()  # type: Set[Set[Square]
+
+        while max_heap:
+            counter += 1
+            if counter % 10 == 0:
+                if is_time_out(0.1):
+                    break
+            last_best = heappop(max_heap)  # type: Tuple[int, NodeAvail, Set[NodeAvail], List[NodeAvail], int, int]
+            (strength_total, node_current, path, nodes_avail, path_infos, prod_avail, max_dist) = last_best
+
+            if node_current.node not in path:
+                # copy the set to prevent cross talk
+                nodes_avail = set(nodes_avail)  # type: Set[NodeAvail]
+                if len(nodes_avail):
+                    nodes_avail.remove(node_current)
+
+                new_path = list(path)  # type: List[Square]
+                new_path.append(node_current.node)
+
+                # build the FrozenSet to add to tested paths
+                path_set = frozenset(new_path)
+                if path_set in paths_tested:
+                    continue
+
+                paths_tested.add(path_set)
+
+                # check if this increases the max distance, if so add the production in
+                if node_current.prev_dist > max_dist:
+                    max_dist = node_current.prev_dist
+                    strength_total -= prod_avail
+
+                # add the new prod after checking if this extends the max
+                if len(new_path) > 1:
+                    prod_avail += node_current.node.production
+
+                if -strength_total > strength_goal:
+                    if len(new_path) < shortest_in_side_heap:
+                        shortest_in_side_heap = len(new_path)
+
+                    heappush(side_heap, (len(new_path), path_infos))
+                    continue
+
+                # throw out this route if longer than current shortest route
+                if len(new_path) > shortest_in_side_heap:
+                    continue
+
+                nodes_to_test = self.graph.get(node_current.node, ())  # type: List[Square]
+
+                for node in nodes_to_test:
+                    # only test those nodes we own
+                    # testing to see if it is in the graph ensures that it shoudl be accessible
+                    if node in self.graph and node.owner == self.id:
+                        nodes_avail.add(NodeAvail(node, node_current.node, node_current.prev_dist + 1))
+
+                for node_test in nodes_avail:
+                    # check the nodes not currently on the path
+                    if node_test.node not in new_path:
+                        if len(new_path) <= size_max:
+                            new_infos = list(path_infos)
+                            new_infos.append(node_test)
+
+                            heappush(max_heap, (
+                                (strength_total - node_test.node.strength), node_test, new_path, nodes_avail, new_infos,
+                                prod_avail, max_dist))
+
+        if side_heap:
+            best = heappop(side_heap)
+        else:
+            best = (0, None)
+
+        logging.debug("best path was %s", best)
+        logging.debug("processing path took %d iterations", counter)
+
+        return best
+
+    def get_path(self, start: Square, target: Square):
+        seen = set()
+        max_heap = [(0, start, ())]
+
+        while max_heap:
+            last_best = heappop(max_heap)
+            (future_value, node_current, path) = last_best
+
+            if node_current not in seen:
+
+                seen.add(node_current)
+
+                new_path = list(path)
+                new_path.append(node_current)
+
+                if node_current == target:
+                    return (future_value, new_path)
+
+                nodes_to_test = self.graph.get(node_current, ())  # type: List[Square]
+
+                for node_test in nodes_to_test:
+                    # check the nodes not currently on the path
+                    if node_test not in seen and node_test in self.graph:
+                        # determine the time to get there
+                        # try a little A* here
+                        new_future = future_value + 1 + self.game_map.get_distance(node_test, target)
+
+                        heappush(max_heap, (new_future, node_test, new_path))
+
+        return (None, None)
+
+
+NodeAvail = namedtuple("NodeAvail", "node previous prev_dist")

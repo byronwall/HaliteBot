@@ -1,8 +1,9 @@
-import argparse
-import cProfile
 import os
-
 import hlt
+import logging
+import time
+import cProfile
+import argparse
 from HaliteBotCode import *
 
 # set up the command line arguments, will be used for parametric testing

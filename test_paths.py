@@ -1,11 +1,6 @@
-import os
-import hlt
-import logging
 import time
-import cProfile
-import argparse
+
 from HaliteBotCode import *
-import time
 
 start_time = time.time()
 
