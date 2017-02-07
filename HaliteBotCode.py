@@ -488,7 +488,7 @@ class HaliteBotCode:
 
         steps, path = self.dij.get_path(start, target)
 
-        if path is not None:
+        if path is not None and len(path) > 1:
             direction = self.game_map.get_direction(path[0], path[1])
             return Move(start, direction)
 
