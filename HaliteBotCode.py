@@ -10,10 +10,6 @@ from scipy.ndimage.filters import gaussian_filter
 from GraphOps import Dijkstra, NodeAvail
 from hlt import *
 
-Edge = namedtuple('Edge', 'left right')
-
-Path = namedtuple('Path', 'value prod_avail time_to_reach steps')
-
 start_time = time.time()
 TIME_MAX = 0.8
 

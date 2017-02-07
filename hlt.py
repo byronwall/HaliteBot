@@ -99,6 +99,8 @@ class GameMap:
         return self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width]
 
     def get_distance(self, sq1: Square, sq2: Square):
+        "Returns Manhattan distance between two squares."
+
         if sq1.x < sq2.x or (sq1.x == sq2.x and sq1.y < sq2.y):
             first = sq1.id
             second = sq2.id
@@ -111,7 +113,6 @@ class GameMap:
         if dist > -1:
             return dist
 
-        "Returns Manhattan distance between two squares."
         dist = min(abs(sq1.x - sq2.x), self.width - 1 - abs(sq2.x - sq1.x)) + min(abs(sq1.y - sq2.y),
                                                                                   self.height - 1 - abs(sq2.y - sq1.y))
 
