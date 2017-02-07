@@ -141,6 +141,9 @@ class Dijkstra:
         return best
 
     def get_path(self, start: Square, target: Square):
+        if target is None:
+            return (None, None)
+
         seen = set()
         max_heap = [(0, start, ())]
 

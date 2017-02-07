@@ -52,7 +52,7 @@ class HaliteBotCode:
         self.inner_border = set()
 
         self.DISTANCE_THRESHOLD = 1 if options["DISTANCE_THRESHOLD"] is None else options["DISTANCE_THRESHOLD"]
-        self.MAX_DISTANCE = 9 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
+        self.MAX_DISTANCE = 7 if options["MAX_DISTANCE"] is None else options["MAX_DISTANCE"]
 
         global TIME_MAX
         TIME_MAX = 0.80 if options["TIME_MAX"] is None else options["TIME_MAX"]
@@ -327,10 +327,9 @@ class HaliteBotCode:
 
         # iterate the edge squares to add to exclude
         # get the border squares
+        interior_start = time.time()
 
-        new_dij = Dijkstra(self.game_map, self.id)
-        for square in self.border_sites:
-            new_dij.add_square_and_neighbors(square)
+        squares_considered = 0
 
         for square in self.owned_sites:
             if is_time_out(0.05):
@@ -339,6 +338,8 @@ class HaliteBotCode:
 
             if square in self.edge_squares or square in self.squares_to_skip or not self.can_move_from(square):
                 continue
+
+            squares_considered += 1
 
             min_distance = 1000
             target_square = None
@@ -359,6 +360,8 @@ class HaliteBotCode:
 
         # iterate the interior find the closest enemy square
 
+        logging.debug("time spent in interior for %d squares: %f", squares_considered, time.time() - interior_start)
+
         return
 
     def update_move_targets2(self):
@@ -376,6 +379,11 @@ class HaliteBotCode:
         border_to_test = border_to_test[:len(border_to_test) // 2]
 
         logging.debug("size of the border after %d", len(border_to_test))
+
+        border_values = dict() # type: Dict[Square, float]
+
+        for border_sq in border_to_test:
+            border_values[border_sq] = self.get_square_value(border_sq)
 
         # loop through owned pieces and make the calls to move them
         for location in self.owned_sites:
@@ -409,7 +417,7 @@ class HaliteBotCode:
                 if distance <= self.DISTANCE_THRESHOLD:
                     distance = 1
 
-                border_value = self.get_square_value(border_square)
+                border_value = border_values[border_square]
 
                 if distance < min_distance or (distance == min_distance and border_value > max_value):
                     min_location = border_square

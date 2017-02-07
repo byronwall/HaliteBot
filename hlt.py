@@ -1,9 +1,12 @@
 import sys
+from collections import defaultdict
 from collections import namedtuple
 from itertools import chain, zip_longest
+from typing import Dict
 from typing import List, Iterable
 
 import logging
+from typing import Set
 
 
 def grouper(iterable, n, fillvalue=None):
@@ -21,15 +24,20 @@ def opposite_cardinal(direction):
     return (direction + 2) % 4 if direction != STILL else STILL
 
 
-_square = namedtuple('Square', 'x y owner strength production')
+_square = namedtuple('Square', 'x y owner strength production id')
+
+dict_distance = defaultdict(lambda: defaultdict(lambda: -1)) # type: Dict[Square, Dict[Square, int]]
+
 
 class Square(_square):
     def __hash__(self):
-        return hash((self.x, self.y))
+        return self.id
+
     def __eq__(self, other):
-        return self.x == other.x and self.y == other.y
+        return self.id == other.id
+
     def __str__(self):
-        return "(%d,%d #%d p%d)" % (self.x, self.y, self.strength, self.production)
+        return "(%d,%d #%d p%d id%d)" % (self.x, self.y, self.strength, self.production, self.id)
 
 
 Move = namedtuple('Move', 'square direction')
@@ -41,7 +49,8 @@ class GameMap:
         logging.debug("production_string:" + production_string)
 
         self.width, self.height = tuple(map(int, size_string.split()))
-        self.production = tuple(tuple(map(int, substring)) for substring in grouper(production_string.split(), self.width))
+        self.production = tuple(
+            tuple(map(int, substring)) for substring in grouper(production_string.split(), self.width))
         self.contents = None
         self.get_frame(map_string)
         self.starting_player_count = len(set(square.owner for square in self)) - 1
@@ -60,7 +69,7 @@ class GameMap:
             owners.extend([owner] * counter)
         assert len(owners) == self.width * self.height
         assert len(split_string) == self.width * self.height
-        self.contents = [[Square(x, y, owner, strength, production)
+        self.contents = [[Square(x, y, owner, strength, production, x * self.width + y)
                           for x, (owner, strength, production)
                           in enumerate(zip(owner_row, strength_row, production_row))]
                          for y, (owner_row, strength_row, production_row)
@@ -68,41 +77,59 @@ class GameMap:
                                           grouper(map(int, split_string), self.width),
                                           self.production))]
 
-    def __iter__(self)-> Iterable[Square]:
+    def __iter__(self) -> Iterable[Square]:
         "Allows direct iteration over all squares in the GameMap instance."
         return chain.from_iterable(self.contents)
 
-    def neighbors(self, square: Square, n: int = 1, include_self: bool = False)-> Iterable[Square]:
+    def neighbors(self, square: Square, n: int = 1, include_self: bool = False) -> Iterable[Square]:
         "Iterable over the n-distance neighbors of a given square.  For single-step neighbors, the enumeration index provides the direction associated with the neighbor."
         assert isinstance(include_self, bool)
         assert isinstance(n, int) and n > 0
         if n == 1:
-            combos = ((0, -1), (1, 0), (0, 1), (-1, 0), (0, 0))   # NORTH, EAST, SOUTH, WEST, STILL ... matches indices provided by enumerate(game_map.neighbors(square))
+            combos = ((0, -1), (1, 0), (0, 1), (-1, 0), (0,
+                                                         0))  # NORTH, EAST, SOUTH, WEST, STILL ... matches indices provided by enumerate(game_map.neighbors(square))
         else:
-            combos = ((dx, dy) for dy in range(-n, n+1) for dx in range(-n, n+1) if abs(dx) + abs(dy) <= n)
-        return (self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width] for dx, dy in combos if include_self or dx or dy)
+            combos = ((dx, dy) for dy in range(-n, n + 1) for dx in range(-n, n + 1) if abs(dx) + abs(dy) <= n)
+        return (self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width] for dx, dy in combos if
+                include_self or dx or dy)
 
-    def get_target(self, square, direction = STILL) -> Square:
+    def get_target(self, square, direction=STILL) -> Square:
         "Returns a single, one-step neighbor in a given direction."
         dx, dy = ((0, -1), (1, 0), (0, 1), (-1, 0), (0, 0))[direction]
         return self.contents[(square.y + dy) % self.height][(square.x + dx) % self.width]
 
-    def get_distance(self, sq1, sq2):
-        "Returns Manhattan distance between two squares."
-        dx = min(abs(sq1.x - sq2.x), sq1.x + self.width - sq2.x, sq2.x + self.width - sq1.x)
-        dy = min(abs(sq1.y - sq2.y), sq1.y + self.height - sq2.y, sq2.y + self.height - sq1.y)
-        return dx + dy
+    def get_distance(self, sq1: Square, sq2: Square):
+        if sq1.x < sq2.x or (sq1.x == sq2.x and sq1.y < sq2.y):
+            first = sq1.id
+            second = sq2.id
+        else:
+            first = sq2.id
+            second = sq1.id
 
-    def get_square(self, x:int, y:int)-> Square:
+        dist = dict_distance[first][second]
+
+        if dist > -1:
+            return dist
+
+        "Returns Manhattan distance between two squares."
+        dist = min(abs(sq1.x - sq2.x), self.width - 1 - abs(sq2.x - sq1.x)) + min(abs(sq1.y - sq2.y),
+                                                                                  self.height - 1 - abs(sq2.y - sq1.y))
+
+        dict_distance[first][second] = dist
+
+        return dist
+
+    def get_square(self, x: int, y: int) -> Square:
         return self.contents[y][x]
 
-    def get_direction(self, start : Square, neighbor:Square):
+    def get_direction(self, start: Square, neighbor: Square):
         for direc in [NORTH, SOUTH, EAST, WEST]:
             if self.get_target(start, direc) == neighbor:
                 return direc
                 break
 
         return -1
+
 
 #################################################################
 # Functions for communicating with the Halite game environment  #
@@ -136,4 +163,6 @@ def translate_cardinal(direction):
 
 
 def send_frame(moves):
-    send_string(' '.join(str(move.square.x) + ' ' + str(move.square.y) + ' ' + str(translate_cardinal(move.direction)) for move in moves))
+    send_string(' '.join(
+        str(move.square.x) + ' ' + str(move.square.y) + ' ' + str(translate_cardinal(move.direction)) for move in
+        moves))
