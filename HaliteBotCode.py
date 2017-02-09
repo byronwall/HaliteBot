@@ -360,7 +360,7 @@ class HaliteBotCode:
             if is_time_out():
                 logging.debug("ran out of time in finding squares to target")
                 break
-            new_entry = (-self.get_enemy_strength_from_square(square, 10), square, None)
+            new_entry = (-self.get_enemy_strength_from_square(square, 5), square, None)
             current_values[square] = new_entry
             heappush(enemy_waiting, new_entry)
             logging.debug("square %s sees enemy str %d", square, new_entry[0])
