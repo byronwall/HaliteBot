@@ -3,6 +3,7 @@ from collections import defaultdict
 from heapq import *
 from typing import Dict
 from typing import Set
+from typing import Tuple
 
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
@@ -98,9 +99,7 @@ class HaliteBotCode:
         if not self.use_best_path or any(self.can_attack_from_square(square) for square in self.border_sites):
             logging.debug("attack started, using original scheme")
 
-            self.update_move_targets2()
-            self.update_moves_for_interior()
-
+            self.update_complex_moves()
             self.use_best_path = False
         else:
             logging.debug("no attack, searching best move")
@@ -318,144 +317,121 @@ class HaliteBotCode:
 
         return
 
-    def update_moves_for_interior(self):
-        # this will try to push the square in the middle to the edge
+    def get_enemy_strength_from_square(self, start: List[Square], dist: int) -> Set[Square]:
+        seen = set()
+        max_heap = []
+        heappush(max_heap, (0, start))
+        enemy_strength = 0
 
-        # iterate the edge squares to add to exclude
-        # get the border squares
-        interior_start = time.time()
+        while max_heap:
+            last_best = heappop(max_heap)
+            (current_distance, node_current) = last_best
+            node_current = node_current  # type: Square
+            if node_current not in seen:
+                seen.add(node_current)
+                if current_distance > dist:
+                    continue
 
-        squares_considered = 0
+                if node_current.owner not in [0, self.id]:
+                    enemy_strength += node_current.strength
 
-        for square in self.owned_sites:
-            if is_time_out(0.05):
-                logging.debug("ran out of time in interior")
-                break
+                for node_test in self.game_map.neighbors(node_current):
+                    # check the nodes not currently on the path
+                    if node_test not in seen:
+                        new_future = current_distance + 1
+                        heappush(max_heap, (new_future, node_test))
 
-            if square in self.edge_squares or square in self.squares_to_skip or not self.can_move_from(square):
-                continue
+        return enemy_strength
 
-            squares_considered += 1
-
-            min_distance = 1000
-            target_square = None
-
-            squares_to_try = self.attack_squares if len(self.attack_squares) else self.border_sites
-
-            for attack_square in squares_to_try:
-                if is_time_out(0.05):
-                    logging.debug("ran out of time in interior check")
-                    break
-                distance = self.game_map.get_distance(square, attack_square)
-                if distance < min_distance:
-                    target_square = attack_square
-                    min_distance = distance
-
-            # this will move the square for so many moves
-            self.add_future_moves(square, target_square)
-
-        # iterate the interior find the closest enemy square
-
-        logging.debug("time spent in interior for %d squares: %f", squares_considered, time.time() - interior_start)
-
-        return
-
-    def update_move_targets2(self):
+    def update_complex_moves(self):
         # this will go through spaces and find those that are accessible and then ranked by strength
 
         # create a dict to assoc border sites
-        border_assoc = defaultdict(list)  # type: Dict[Square, List[Square]]
 
-        desired_moves = dict()  # type: Dict[Square, Move]
+        owned_at_border, other = self.dij.get_squares_in_range(self.border_sites, 1)
 
-        border_to_test = sorted(self.border_sites, key=self.get_square_value, reverse=True)
+        current_values = dict()  # type: Dict[Square, Tuple[int, Square, Square]]
 
-        logging.debug("size of the border before %d", len(border_to_test))
+        enemy_waiting = []
 
-        border_to_test = border_to_test[:len(border_to_test) // 2]
+        squares_processed = set()
 
-        logging.debug("size of the border after %d", len(border_to_test))
-
-        border_values = dict() # type: Dict[Square, float]
-
-        for border_sq in border_to_test:
-            border_values[border_sq] = self.get_square_value(border_sq)
-
-        # loop through owned pieces and make the calls to move them
-        for location in self.owned_sites:
-            if is_time_out(0.1):
-                logging.debug("ran out of time at start in update_move_targets2")
-                break
-
-            # skip those squares not in the edge
-            if location not in self.edge_squares:
-                continue
-
-            if location.strength == 0:
-                continue
-
-            # find the closest border spot
-            min_location = None
-            max_value = 0
-            min_distance = 1000
-
-            if not self.can_move_from(location):
-                continue
-
-            for border_square in border_to_test:
-                if is_time_out(0.1):
-                    logging.debug("ran out of time at middle in update_move_targets2")
-                    break
-
-                distance = self.game_map.get_distance(border_square, location)
-
-                # threshold the distance to allow for some movement
-                if distance <= self.DISTANCE_THRESHOLD:
-                    distance = 1
-
-                border_value = border_values[border_square]
-
-                if distance < min_distance or (distance == min_distance and border_value > max_value):
-                    min_location = border_square
-                    max_value = border_value
-                    min_distance = distance
-
-            # add a check here to see if move should be made
-
-            if min_location is not None:
-                border_assoc[min_location].append(location)
-
-        # iterate through the border sites now to determine if to move
-        for border_square, locations in border_assoc.items():
-            # get the sum of the strengths
-            total_strength = 0
-            for location in locations:
-                total_strength += location.strength
-
-            if total_strength > border_square.strength:
-                # if so, move that direction
-                for location in locations:
-                    move = self.get_next_move(location, border_square)
-
-                    if move is not None:
-                        desired_moves[location] = move
-
-        # this allows move to be checked a couple times to see if the situation improves
-        max_check = 5
-        times_checked = 0
-
-        while len(desired_moves) > 0 and times_checked < max_check:
+        for square in owned_at_border:
             if is_time_out():
-                logging.debug("ran out of time making moves in update_move_targets2")
+                logging.debug("ran out of time in finding squares to target")
                 break
-            for key in list(desired_moves.keys()):
-                move = desired_moves[key]
-                if self.is_move_allowed(move):
-                    desired_moves.pop(key)
-                    self.moves_this_frame.append(move)
+            new_entry = (-self.get_enemy_strength_from_square(square, 10), square, None)
+            current_values[square] = new_entry
+            heappush(enemy_waiting, new_entry)
+            logging.debug("square %s sees enemy str %d", square, new_entry[0])
 
-            times_checked += 1
+        while enemy_waiting:
+            if is_time_out():
+                logging.debug("ran out of time in enemy_waiting loop")
+                break
 
+            str_need, square, prev_square = heappop(enemy_waiting)
+
+            logging.debug("processing square %s from %s w/ str %f", square, prev_square, str_need)
+
+            if square in squares_processed:
+                continue
+
+            if self.can_move_from(square):
+                if prev_square is None:
+                    # these are the first moves, decide where to go, check neighbors make move
+                    # get the value of the neighbors and move there
+                    max_value = 0
+                    best_target = None
+                    for possible_target in self.game_map.neighbors(square):
+                        if possible_target.owner != self.id:
+                            value = self.get_square_value(possible_target)
+                            if value > max_value:
+                                best_target = possible_target
+                                max_value = value
+
+                    if best_target is not None:
+                        logging.debug("square is going after %s %s %f", square, best_target, max_value)
+                        # have a good target, add the move
+                        self.moves_this_frame.append(Move(square, self.game_map.get_direction(square, best_target)))
+
+                else:
+                    # these need to follow the leader if they have strength
+                    logging.debug("square %s is following prev %s", square, prev_square)
+                    self.moves_this_frame.append(Move(square, self.game_map.get_direction(square, prev_square)))
+
+            squares_processed.add(square)
+
+            neighbor_count = 0
+
+            for next_square in self.game_map.neighbors(square):
+                if next_square.owner == self.id:
+                    neighbor_count += 1
+
+            if neighbor_count > 0:
+                str_need = str_need / neighbor_count
+
+            # take that strength and add to the neighbors as they are processed
+            for next_square in self.game_map.neighbors(square):
+                if next_square in squares_processed:
+                    continue
+
+                # only make moves for the neighbors that we own
+                if next_square.owner == self.id:
+                    if next_square in current_values:
+                        # this will update the current entry and reheap the heap
+                        prev_str, sq1, sq2 = current_values[next_square]
+                        current_values[next_square] = (prev_str - str_need, sq1, sq2)
+                        logging.debug("update sq str need to %s %f", next_square, current_values[next_square][0])
+                        heapify(enemy_waiting)
+                    else:
+                        # this will add a new entry to the heap
+                        new_entry = (str_need, next_square, square)
+                        current_values[next_square] = new_entry
+                        heappush(enemy_waiting, new_entry)
+                        logging.debug("added new entry for neighbor %s %s", next_square, new_entry)
+
+        logging.debug("done with processing borders")
         return
 
     def add_future_moves(self, start: Square, target: Square) -> Move:

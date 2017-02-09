@@ -204,7 +204,8 @@ class Dijkstra:
                 if current_distance == dist:
                     inner_border.add(node_current)
 
-                final_range.add(node_current)
+                if node_current.owner == self.id:
+                    final_range.add(node_current)
 
                 nodes_to_test = self.graph.get(node_current, ())  # type: List[Square]
 
