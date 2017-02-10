@@ -338,9 +338,8 @@ class HaliteBotCode:
                 for node_test in self.game_map.neighbors(node_current):
                     # check the nodes not currently on the path
                     if node_test not in seen:
-                        if (node_test.owner == 0 and node_test.strength == 0) or node_test.owner != self.id:
-                            new_future = current_distance + 1
-                            heappush(max_heap, (new_future, node_test))
+                        new_future = current_distance + 1
+                        heappush(max_heap, (new_future, node_test))
 
         return enemy_strength
 
@@ -357,20 +356,11 @@ class HaliteBotCode:
 
         squares_processed = set()
 
-        expected_strength = dict() # type: Dict[Square, int]
-        for square in self.owned_sites:
-            expected_strength[square] = square.strength
-
         for square in owned_at_border:
             if is_time_out():
                 logging.debug("ran out of time in finding squares to target")
                 break
-            # get the strength and skip move if 0
-            str_from_spot = self.get_enemy_strength_from_square(square, 5)
-            if str_from_spot == 0:
-                continue
-
-            new_entry = (-str_from_spot, square, None)
+            new_entry = (-self.get_enemy_strength_from_square(square, 5), square, None)
             current_values[square] = new_entry
             heappush(enemy_waiting, new_entry)
             logging.debug("square %s sees enemy str %d", square, new_entry[0])
@@ -408,12 +398,7 @@ class HaliteBotCode:
                 else:
                     # these need to follow the leader if they have strength
                     logging.debug("square %s is following prev %s", square, prev_square)
-
-                    # check the expected strength
-                    if expected_strength[prev_square] + square.strength < 300:
-                        self.moves_this_frame.append(Move(square, self.game_map.get_direction(square, prev_square)))
-                        expected_strength[square] -= square.strength
-                        expected_strength[prev_square] += square.strength
+                    self.moves_this_frame.append(Move(square, self.game_map.get_direction(square, prev_square)))
 
             squares_processed.add(square)
 
@@ -425,7 +410,6 @@ class HaliteBotCode:
 
             if neighbor_count > 0:
                 str_need = str_need / neighbor_count
-                logging.debug("str_need: %f", str_need)
 
             # take that strength and add to the neighbors as they are processed
             for next_square in self.game_map.neighbors(square):
