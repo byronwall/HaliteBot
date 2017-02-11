@@ -175,25 +175,16 @@ class HaliteBotCode:
 
     def get_square_value(self, square: Square) -> float:
 
-        border_value = 1000000
-
         # this needs to determine the value of a site, take the average of the
         if square.strength == 0:
             border_value = sum(neighbor.strength
                                for neighbor in self.game_map.neighbors(square) if
                                neighbor.owner not in [0, self.id]) * 10
 
-            if border_value == 0:
-                # nothing to attack, value pieces near enemy greater... to avoid backing out of battle
-                if any(neighbor.owner not in [0, self.id] for neighbor in self.game_map.neighbors(square)):
-                    border_value = 2
-                else:
-                    border_value = 1
+            # this will return the total of the enemy str or 1000 for a valuable 0 str spot.
+            return border_value if border_value > 0 else 1000
 
-        else:
-            border_value = self.get_square_metric(square)
-
-        return border_value
+        return self.get_square_metric(square)
 
     def get_square_metric(self, square: Square):
         # return (square.production * (self.total_frames - self.frame) - square.strength) / 10
@@ -366,6 +357,21 @@ class HaliteBotCode:
             heappush(enemy_waiting, new_entry)
             logging.debug("square %s sees enemy str %d", square, new_entry[0])
 
+        # handle the case where there are no attacks after entering CAS mode
+        if not enemy_waiting:
+            logging.debug("no attack avail, processing border value")
+            for square in owned_at_border:
+                if is_time_out():
+                    logging.debug("ran out of time in finding squares to target")
+                    break
+
+            value = self.get_square_value(square)
+
+            new_entry = (-value, square, None)
+            current_values[square] = new_entry
+            heappush(enemy_waiting, new_entry)
+            logging.debug("square %s sees enemy str %d", square, new_entry[0])
+
         while enemy_waiting:
             if is_time_out():
                 logging.debug("ran out of time in enemy_waiting loop")
@@ -399,14 +405,29 @@ class HaliteBotCode:
                 else:
                     # these need to follow the leader if they have strength
                     logging.debug("square %s is following prev %s", square, prev_square)
-                    direc = self.game_map.get_direction(square, prev_square)
+
+                    # check if there is a 0 -str neighbor to grab
+                    neighbors = self.game_map.neighbors(square)
+
+                    move = None
+
+                    for neighbor in neighbors:
+                        if neighbor.owner != self.id and neighbor.strength == 0 and self.expected_strength[neighbor] == 0:
+                            move = self.add_move_if_str_ok(square, neighbor)
+                            if move is not None:
+                                logging.debug("taking a 0 str spot %s to %s", square, neighbor)
+                                break
+
                     # check the expected strength
-                    if self.add_move_if_str_ok(square, prev_square) is None:
-                        for neighbor in self.game_map.neighbors(square):
-                            if neighbor.owner == self.id:
-                                move = self.add_move_if_str_ok(square, neighbor)
-                                if move is not None:
-                                    break
+                    if move is None:
+                        move = self.add_move_if_str_ok(square, prev_square)
+                        if move is None:
+                            # search for a new move if prev square is taken
+                            for neighbor in neighbors:
+                                if neighbor.owner == self.id:
+                                    move = self.add_move_if_str_ok(square, neighbor)
+                                    if move is not None:
+                                        break
 
             squares_processed.add(square)
 
