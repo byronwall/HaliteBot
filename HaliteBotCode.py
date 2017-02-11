@@ -412,7 +412,12 @@ class HaliteBotCode:
                     move = None
 
                     for neighbor in neighbors:
-                        if neighbor.owner != self.id and neighbor.strength == 0 and self.expected_strength[neighbor] == 0:
+                        # this will take a square if its a 0 str sitting off the main attack
+                        takeNeighbor1 = neighbor.owner != self.id and neighbor.strength == 0 and self.expected_strength[
+                                                                                                 neighbor] == 0
+                        # this will attack a square if we already have 3 sides of it
+                        takeNeighbor2 = neighbor.owner == 0 and sum(1 for neigh in self.game_map.neighbors(neighbor) if neigh.owner == self.id) > 2 and square.strength > neighbor.strength
+                        if takeNeighbor1 or takeNeighbor2:
                             move = self.add_move_if_str_ok(square, neighbor)
                             if move is not None:
                                 logging.debug("taking a 0 str spot %s to %s", square, neighbor)
