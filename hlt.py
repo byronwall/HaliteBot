@@ -113,8 +113,8 @@ class GameMap:
         if dist > -1:
             return dist
 
-        dist = min(abs(sq1.x - sq2.x), self.width - 1 - abs(sq2.x - sq1.x)) + min(abs(sq1.y - sq2.y),
-                                                                                  self.height - 1 - abs(sq2.y - sq1.y))
+        dist = min(abs(sq1.x - sq2.x), self.width - abs(sq2.x - sq1.x)) + min(abs(sq1.y - sq2.y),
+                                                                                  self.height - abs(sq2.y - sq1.y))
 
         dict_distance[first][second] = dist
 
@@ -131,6 +131,11 @@ class GameMap:
 
         return -1
 
+    def get_move(self, start: Square, target: Square):
+        if self.get_distance(start, target) == 1:
+            return Move(start, self.get_direction(start, target))
+
+        return None
 
 #################################################################
 # Functions for communicating with the Halite game environment  #

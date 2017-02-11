@@ -169,26 +169,9 @@ class HaliteBotCode:
 
         return allow_move
 
-    def is_move_allowed(self, move: Move) -> bool:
-
-        allow_move = True
-
-        source = move.square
-        target = self.game_map.get_target(source, move.direction)
-
-        # this should prevent large blocks from combining
-        if allow_move:
-            if 350 - self.expected_strength[target] < source.strength:
-                allow_move = False
-            else:
-                self.expected_strength[target] += source.strength
-                self.expected_strength[source] -= source.strength
-
-        return allow_move
-
     def can_attack_from_square(self, square: Square) -> bool:
         # this will return a bool indicating if the square can be attacked
-        return any(neighbor.owner not in [0, self.id] for neighbor in self.game_map.neighbors(square))
+        return any(neighbor.owner not in [0, self.id] and neighbor.strength == 0 for neighbor in self.game_map.neighbors(square))
 
     def get_square_value(self, square: Square) -> float:
 
@@ -323,13 +306,21 @@ class HaliteBotCode:
         heappush(max_heap, (0, start))
         enemy_strength = 0
 
+        is_start = True
+
         while max_heap:
             last_best = heappop(max_heap)
             (current_distance, node_current) = last_best
             node_current = node_current  # type: Square
             if node_current not in seen:
                 seen.add(node_current)
-                if current_distance > dist:
+                if current_distance > dist or (node_current.owner == self.id and not is_start):
+                    is_start = False
+                    continue
+
+                is_start = False
+
+                if node_current.owner == 0 and node_current.strength > 0:
                     continue
 
                 if node_current.owner not in [0, self.id]:
@@ -394,7 +385,7 @@ class HaliteBotCode:
                     max_value = 0
                     best_target = None
                     for possible_target in self.game_map.neighbors(square):
-                        if possible_target.owner != self.id:
+                        if possible_target.owner != self.id and self.is_move_ok_with_str(square, possible_target):
                             value = self.get_square_value(possible_target)
                             if value > max_value:
                                 best_target = possible_target
@@ -403,17 +394,19 @@ class HaliteBotCode:
                     if best_target is not None:
                         logging.debug("square is going after %s %s %f", square, best_target, max_value)
                         # have a good target, add the move
-                        self.moves_this_frame.append(Move(square, self.game_map.get_direction(square, best_target)))
+                        self.add_move_if_str_ok(square, best_target)
 
                 else:
                     # these need to follow the leader if they have strength
                     logging.debug("square %s is following prev %s", square, prev_square)
-
+                    direc = self.game_map.get_direction(square, prev_square)
                     # check the expected strength
-                    if expected_strength[prev_square] + square.strength < 300:
-                        self.moves_this_frame.append(Move(square, self.game_map.get_direction(square, prev_square)))
-                        expected_strength[square] -= square.strength
-                        expected_strength[prev_square] += square.strength
+                    if self.add_move_if_str_ok(square, prev_square) is None:
+                        for neighbor in self.game_map.neighbors(square):
+                            if neighbor.owner == self.id:
+                                move = self.add_move_if_str_ok(square, neighbor)
+                                if move is not None:
+                                    break
 
             squares_processed.add(square)
 
@@ -437,9 +430,9 @@ class HaliteBotCode:
                     if next_square in current_values:
                         # this will update the current entry and reheap the heap
                         prev_str, sq1, sq2 = current_values[next_square]
-                        current_values[next_square] = (prev_str - str_need, sq1, sq2)
+                        current_values[next_square] = (prev_str + str_need, sq1, sq2)
                         logging.debug("update sq str need to %s %f", next_square, current_values[next_square][0])
-                        heapify(enemy_waiting)
+                        heappush(enemy_waiting, current_values[next_square])
                     else:
                         # this will add a new entry to the heap
                         new_entry = (str_need, next_square, square)
@@ -449,6 +442,25 @@ class HaliteBotCode:
 
         logging.debug("done with processing borders")
         return
+
+    def is_move_ok_with_str(self, start:Square, target:Square):
+        logging.debug("str expect and str avail %d %d", self.expected_strength[target], start.strength)
+        return (self.expected_strength[target] + start.strength) < 300
+
+    def add_move_if_str_ok(self, start: Square, target: Square):
+        if self.is_move_ok_with_str(start, target):
+            move = self.game_map.get_move(start, target)
+            logging.debug("move for %s was found %s", start, move)
+            if move is not None:
+                self.expected_strength[start] -= start.strength
+                self.expected_strength[target] += start.strength
+                self.moves_this_frame.append(move)
+
+                logging.debug("move was added %s target %s", move, self.game_map.get_target(start, move.direction))
+
+                return Move
+
+        return None
 
     def add_future_moves(self, start: Square, target: Square) -> Move:
 
@@ -497,6 +509,8 @@ class HaliteBotCode:
                 self.expected_strength[square] = square.strength
             else:
                 self.expected_strength[square] = -square.strength
+
+        logging.debug("size of owned sites %d", len(self.owned_sites))
 
         return
 
